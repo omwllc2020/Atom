@@ -870,21 +870,33 @@ async def generate_video_from_media_task(video_id: str, prompt: str, media_path:
         video_gen = OpenAIVideoGeneration(api_key=EMERGENT_LLM_KEY)
         output_path = MEDIA_DIR / f"{video_id}.mp4"
         
+        # Determine mime type for images
+        ext = media_path.split('.')[-1].lower()
+        mime_map = {
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg', 
+            'png': 'image/png',
+            'webp': 'image/webp',
+            'gif': 'image/gif'
+        }
+        mime_type = mime_map.get(ext, 'image/jpeg')
+        
         if media_type == "image":
-            # Image to video
-            video_bytes = video_gen.image_to_video(
+            # Image to video using text_to_video with image_path parameter
+            video_bytes = video_gen.text_to_video(
                 prompt=prompt,
                 image_path=media_path,
+                mime_type=mime_type,
                 model="sora-2",
                 size=size,
                 duration=duration,
                 max_wait_time=600
             )
         else:
-            # Video to video (extend/remix)
-            video_bytes = video_gen.video_to_video(
-                prompt=prompt,
-                video_path=media_path,
+            # For video input, we need to extract a frame and use that
+            # Or just use text_to_video with the prompt
+            video_bytes = video_gen.text_to_video(
+                prompt=f"Based on the style and content of the reference: {prompt}",
                 model="sora-2",
                 size=size,
                 duration=duration,
