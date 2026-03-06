@@ -1,0 +1,136 @@
+{
+  "success": false,
+  "total_tests": 12,
+  "passed_tests": 7,
+  "test_results": [
+    {
+      "test_name": "API Health Check",
+      "success": true,
+      "timestamp": "2026-03-06T03:05:36.854824",
+      "response_data": {
+        "message": "Forge AI API is running",
+        "version": "1.0.0"
+      },
+      "error": null
+    },
+    {
+      "test_name": "User Registration",
+      "success": true,
+      "timestamp": "2026-03-06T03:05:37.586460",
+      "response_data": {
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmY2RkMjYxZS1mNDA0LTQ5MGQtODE3Zi0zM2ViZThmYjA0NDAiLCJleHAiOjE3NzI4NTI3Mzd9.36x04KE7yIUWXuOQWRSWy091QrqDyquBSBQXuafDPVo",
+        "token_type": "bearer",
+        "user": {
+          "id": "fcdd261e-f404-490d-817f-33ebe8fb0440",
+          "email": "test_user_1772766336@forge.ai",
+          "name": "Test User 1772766336",
+          "created_at": "2026-03-06T03:05:37.071230+00:00"
+        }
+      },
+      "error": null
+    },
+    {
+      "test_name": "Get User Profile",
+      "success": true,
+      "timestamp": "2026-03-06T03:05:38.142513",
+      "response_data": {
+        "id": "fcdd261e-f404-490d-817f-33ebe8fb0440",
+        "email": "test_user_1772766336@forge.ai",
+        "name": "Test User 1772766336",
+        "created_at": "2026-03-06T03:05:37.071230+00:00"
+      },
+      "error": null
+    },
+    {
+      "test_name": "Send Chat Message",
+      "success": true,
+      "timestamp": "2026-03-06T03:05:43.807227",
+      "response_data": {
+        "response": "```python\ndef add(a, b):\n    \"\"\"Return the sum of two numbers.\"\"\"\n    return a + b\n```\n\nExample usage:\n\n```python\nresult = add(3, 5)\nprint(result)  # 8\n```",
+        "conversation_id": "1d0270b8-28b8-4e7f-aa9d-44df108bfc8c",
+        "message_id": "ea56956a-d1f4-4e13-9897-3e9be3c583d4"
+      },
+      "error": null
+    },
+    {
+      "test_name": "Get Conversations",
+      "success": true,
+      "timestamp": "2026-03-06T03:05:44.346222",
+      "response_data": [
+        {
+          "id": "1d0270b8-28b8-4e7f-aa9d-44df108bfc8c",
+          "title": "Hello, write a simple Python function to add two n...",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Hello, write a simple Python function to add two numbers",
+              "timestamp": "2026-03-06T03:05:41.718798+00:00"
+            },
+            {
+              "role": "assistant",
+              "content": "```python\ndef add(a, b):\n    \"\"\"Return the sum of two numbers.\"\"\"\n    return a + b\n```\n\nExample usage:\n\n```python\nresult = add(3, 5)\nprint(result)  # 8\n```",
+              "timestamp": "2026-03-06T03:05:43.566486+00:00"
+            }
+          ],
+          "created_at": "2026-03-06T03:05:41.718798+00:00",
+          "updated_at": "2026-03-06T03:05:43.566496+00:00"
+        }
+      ],
+      "error": null
+    },
+    {
+      "test_name": "Start Video Generation",
+      "success": true,
+      "timestamp": "2026-03-06T03:05:44.802498",
+      "response_data": {
+        "video_id": "e22ede98-e05f-46ba-a378-ba9722e83e99",
+        "status": "processing",
+        "video_url": null
+      },
+      "error": null
+    },
+    {
+      "test_name": "Check Video Status",
+      "success": false,
+      "timestamp": "2026-03-06T03:06:14.880985",
+      "response_data": null,
+      "error": "HTTPSConnectionPool(host='nano-dev-creator.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
+    },
+    {
+      "test_name": "Generate Image",
+      "success": false,
+      "timestamp": "2026-03-06T03:06:44.992899",
+      "response_data": null,
+      "error": "HTTPSConnectionPool(host='nano-dev-creator.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
+    },
+    {
+      "test_name": "Clone Website",
+      "success": false,
+      "timestamp": "2026-03-06T03:07:15.086426",
+      "response_data": null,
+      "error": "HTTPSConnectionPool(host='nano-dev-creator.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
+    },
+    {
+      "test_name": "Get User Videos",
+      "success": false,
+      "timestamp": "2026-03-06T03:07:45.180158",
+      "response_data": null,
+      "error": "HTTPSConnectionPool(host='nano-dev-creator.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
+    },
+    {
+      "test_name": "Get User Images",
+      "success": false,
+      "timestamp": "2026-03-06T03:08:15.283671",
+      "response_data": null,
+      "error": "HTTPSConnectionPool(host='nano-dev-creator.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
+    },
+    {
+      "test_name": "Get User Clones",
+      "success": true,
+      "timestamp": "2026-03-06T03:08:33.584446",
+      "response_data": [],
+      "error": null
+    }
+  ],
+  "timestamp": "2026-03-06T03:08:33.585557"
+}
