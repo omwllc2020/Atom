@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Backend API Testing Suite for Forge AI App
-Tests all authentication, chat, video, image, and site cloning endpoints
+Backend API Testing Suite for ATOM AI App
+Tests authentication, chat, IDE features (code execution, auto-fix, projects), video, image, and site cloning endpoints
 """
 import requests
 import sys
@@ -9,7 +9,7 @@ import time
 import json
 from datetime import datetime
 
-class ForgeAPITester:
+class AtomAPITester:
     def __init__(self, base_url="https://nano-dev-creator.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.token = None
@@ -288,6 +288,197 @@ class ForgeAPITester:
             
         return success
 
+    def test_code_execution(self):
+        """Test code execution functionality"""
+        if not self.token:
+            self.log_test("Code Execution", False, None, "No auth token available")
+            return False
+        
+        # Test Python code execution
+        success, response = self.run_test(
+            "Execute Python Code",
+            "POST",
+            "code/execute",
+            200,
+            data={
+                "code": "print('Hello from Python!')\nresult = 2 + 2\nprint(f'2 + 2 = {result}')",
+                "language": "python"
+            }
+        )
+        
+        if success:
+            print(f"   ✓ Output: {response.get('output', '')[:100]}...")
+            print(f"   ✓ Success: {response.get('success')}")
+            
+        return success
+    
+    def test_javascript_execution(self):
+        """Test JavaScript code execution"""
+        if not self.token:
+            self.log_test("JavaScript Execution", False, None, "No auth token available")
+            return False
+            
+        success, response = self.run_test(
+            "Execute JavaScript Code",
+            "POST",
+            "code/execute",
+            200,
+            data={
+                "code": "console.log('Hello from JavaScript!');\nconst result = 2 + 2;\nconsole.log(`2 + 2 = ${result}`);",
+                "language": "javascript"
+            }
+        )
+        
+        if success:
+            print(f"   ✓ Output: {response.get('output', '')[:100]}...")
+            print(f"   ✓ Success: {response.get('success')}")
+            
+        return success
+    
+    def test_html_execution(self):
+        """Test HTML code execution"""
+        if not self.token:
+            self.log_test("HTML Execution", False, None, "No auth token available")
+            return False
+            
+        success, response = self.run_test(
+            "Execute HTML Code",
+            "POST",
+            "code/execute",
+            200,
+            data={
+                "code": "<!DOCTYPE html><html><body><h1>Test HTML</h1></body></html>",
+                "language": "html"
+            }
+        )
+        
+        if success:
+            print(f"   ✓ Output: {response.get('output', '')[:50]}...")
+            print(f"   ✓ Success: {response.get('success')}")
+            
+        return success
+    
+    def test_autofix_functionality(self):
+        """Test auto-fix functionality"""
+        if not self.token:
+            self.log_test("Auto-fix", False, None, "No auth token available")
+            return False
+            
+        # Test with broken Python code
+        success, response = self.run_test(
+            "Auto-fix Python Code",
+            "POST",
+            "code/autofix",
+            200,
+            data={
+                "code": "print('Hello World'\n# Missing closing parenthesis",
+                "language": "python",
+                "error": "SyntaxError: '(' was never closed"
+            }
+        )
+        
+        if success:
+            print(f"   ✓ Fixed: {response.get('success')}")
+            print(f"   ✓ Explanation: {response.get('explanation', '')[:100]}...")
+            
+        return success
+    
+    def test_autofix_loop(self):
+        """Test auto-fix loop functionality"""
+        if not self.token:
+            self.log_test("Auto-fix Loop", False, None, "No auth token available")
+            return False
+            
+        success, response = self.run_test(
+            "Auto-fix Loop",
+            "POST",
+            "code/autofix-loop",
+            200,
+            data={
+                "code": "print('Hello World'\n# Missing closing parenthesis",
+                "language": "python"
+            }
+        )
+        
+        if success:
+            print(f"   ✓ Final success: {response.get('success')}")
+            print(f"   ✓ Attempts: {response.get('total_attempts')}")
+            
+        return success
+    
+    def test_project_management(self):
+        """Test project management functionality"""
+        if not self.token:
+            self.log_test("Project Management", False, None, "No auth token available")
+            return False
+        
+        # Create a project
+        success, response = self.run_test(
+            "Create Project",
+            "POST",
+            "projects",
+            200,
+            data={
+                "name": "Test Project",
+                "description": "A test project for API testing"
+            }
+        )
+        
+        if success:
+            self.project_id = response.get('id')
+            print(f"   ✓ Project ID: {self.project_id}")
+            print(f"   ✓ Default files: {len(response.get('files', []))}")
+            
+        return success
+    
+    def test_project_operations(self):
+        """Test project file operations"""
+        if not self.token or not hasattr(self, 'project_id'):
+            self.log_test("Project Operations", False, None, "No project ID available")
+            return False
+        
+        # Get projects
+        success1, response = self.run_test(
+            "Get Projects",
+            "GET",
+            "projects",
+            200
+        )
+        
+        # Get specific project
+        success2, response = self.run_test(
+            "Get Project Details",
+            "GET",
+            f"projects/{self.project_id}",
+            200
+        )
+        
+        # Add a file
+        success3, response = self.run_test(
+            "Add File to Project",
+            "POST",
+            f"projects/{self.project_id}/files",
+            200,
+            data={
+                "name": "test.py",
+                "content": "print('Test file')",
+                "language": "python"
+            }
+        )
+        
+        # Update a file
+        success4, response = self.run_test(
+            "Update File in Project",
+            "PUT",
+            f"projects/{self.project_id}/files/test.py",
+            200,
+            data={
+                "content": "print('Updated test file')"
+            }
+        )
+        
+        return all([success1, success2, success3, success4])
+
     def test_get_user_content(self):
         """Test getting user generated content"""
         if not self.token:
@@ -310,7 +501,7 @@ class ForgeAPITester:
     def run_all_tests(self):
         """Run complete test suite"""
         print("=" * 60)
-        print("🚀 FORGE AI API TESTING SUITE")
+        print("🚀 ATOM AI API TESTING SUITE")
         print("=" * 60)
         print(f"Testing against: {self.base_url}")
         print()
@@ -335,6 +526,17 @@ class ForgeAPITester:
         # Core functionality
         self.test_chat_message()
         self.test_get_conversations()
+        
+        # IDE/Code execution features (NEW)
+        self.test_code_execution()
+        self.test_javascript_execution()  
+        self.test_html_execution()
+        self.test_autofix_functionality()
+        self.test_autofix_loop()
+        self.test_project_management()
+        self.test_project_operations()
+        
+        # Media generation
         self.test_video_generation_start()
         self.test_video_status()
         self.test_image_generation()
@@ -363,7 +565,7 @@ class ForgeAPITester:
         return self.tests_passed == self.tests_run
 
 if __name__ == "__main__":
-    tester = ForgeAPITester()
+    tester = AtomAPITester()
     success = tester.run_all_tests()
     
     # Save results to file

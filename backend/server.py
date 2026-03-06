@@ -7,8 +7,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
@@ -17,6 +17,11 @@ import asyncio
 import base64
 import aiofiles
 import httpx
+import subprocess
+import tempfile
+import sys
+import io
+import traceback
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -39,9 +44,13 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
-# Video/Image storage directory
+# Media storage directory
 MEDIA_DIR = ROOT_DIR / "media"
 MEDIA_DIR.mkdir(exist_ok=True)
+
+# Projects directory
+PROJECTS_DIR = ROOT_DIR / "projects"
+PROJECTS_DIR.mkdir(exist_ok=True)
 
 # Configure logging
 logging.basicConfig(
@@ -73,24 +82,28 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 class ChatMessage(BaseModel):
-    role: str  # "user" or "assistant"
+    role: str
     content: str
     timestamp: str
 
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
-    context: Optional[str] = None  # For code context
+    context: Optional[str] = None
+    project_id: Optional[str] = None
+    auto_fix: bool = False
 
 class ChatResponse(BaseModel):
     response: str
     conversation_id: str
     message_id: str
+    code_blocks: Optional[List[Dict[str, str]]] = None
+    auto_fix_applied: bool = False
 
 class VideoGenRequest(BaseModel):
     prompt: str
-    size: str = "1280x720"  # 1280x720, 1792x1024, 1024x1792, 1024x1024
-    duration: int = 4  # 4, 8, or 12 seconds
+    size: str = "1280x720"
+    duration: int = 4
 
 class VideoGenResponse(BaseModel):
     video_id: str
@@ -102,7 +115,7 @@ class ImageGenRequest(BaseModel):
 
 class ImageGenResponse(BaseModel):
     image_id: str
-    image_data: str  # base64
+    image_data: str
     text_response: Optional[str] = None
 
 class SiteCloneRequest(BaseModel):
@@ -120,6 +133,56 @@ class ConversationResponse(BaseModel):
     messages: List[ChatMessage]
     created_at: str
     updated_at: str
+
+# New Models for Code Execution & Projects
+class CodeExecuteRequest(BaseModel):
+    code: str
+    language: str  # python, javascript, html
+    project_id: Optional[str] = None
+
+class CodeExecuteResponse(BaseModel):
+    output: str
+    error: Optional[str] = None
+    execution_time: float
+    success: bool
+
+class AutoFixRequest(BaseModel):
+    code: str
+    language: str
+    error: str
+    project_id: Optional[str] = None
+
+class AutoFixResponse(BaseModel):
+    fixed_code: str
+    explanation: str
+    changes_made: List[str]
+    success: bool
+
+class ProjectFile(BaseModel):
+    name: str
+    path: str
+    content: str
+    language: str
+
+class ProjectCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class ProjectResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str]
+    files: List[Dict[str, Any]]
+    created_at: str
+    updated_at: str
+
+class FileCreate(BaseModel):
+    name: str
+    content: str = ""
+    language: Optional[str] = None
+
+class FileUpdate(BaseModel):
+    content: str
 
 # ==================== AUTH HELPERS ====================
 
@@ -153,7 +216,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(user_data: UserCreate):
-    # Check if user exists
     existing = await db.users.find_one({"email": user_data.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -198,6 +260,386 @@ async def login(credentials: UserLogin):
 async def get_me(current_user: dict = Depends(get_current_user)):
     return UserResponse(**current_user)
 
+# ==================== CODE EXECUTION ====================
+
+def detect_language(filename: str) -> str:
+    """Detect programming language from filename"""
+    ext_map = {
+        '.py': 'python',
+        '.js': 'javascript',
+        '.ts': 'typescript',
+        '.html': 'html',
+        '.css': 'css',
+        '.json': 'json',
+        '.md': 'markdown',
+        '.jsx': 'javascript',
+        '.tsx': 'typescript',
+        '.java': 'java',
+        '.cpp': 'cpp',
+        '.c': 'c',
+        '.go': 'go',
+        '.rs': 'rust',
+        '.rb': 'ruby',
+        '.php': 'php',
+        '.swift': 'swift',
+        '.kt': 'kotlin',
+        '.sql': 'sql',
+        '.sh': 'bash',
+        '.yaml': 'yaml',
+        '.yml': 'yaml',
+        '.xml': 'xml',
+    }
+    ext = Path(filename).suffix.lower()
+    return ext_map.get(ext, 'text')
+
+def execute_python(code: str, timeout: int = 10) -> tuple:
+    """Execute Python code safely"""
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(code)
+            temp_file = f.name
+        
+        result = subprocess.run(
+            [sys.executable, temp_file],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=tempfile.gettempdir()
+        )
+        
+        os.unlink(temp_file)
+        
+        output = result.stdout
+        error = result.stderr if result.returncode != 0 else None
+        
+        return output, error, result.returncode == 0
+        
+    except subprocess.TimeoutExpired:
+        return "", "Execution timed out (10s limit)", False
+    except Exception as e:
+        return "", str(e), False
+
+def execute_javascript(code: str, timeout: int = 10) -> tuple:
+    """Execute JavaScript code using Node.js"""
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
+            f.write(code)
+            temp_file = f.name
+        
+        result = subprocess.run(
+            ['node', temp_file],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=tempfile.gettempdir()
+        )
+        
+        os.unlink(temp_file)
+        
+        output = result.stdout
+        error = result.stderr if result.returncode != 0 else None
+        
+        return output, error, result.returncode == 0
+        
+    except subprocess.TimeoutExpired:
+        return "", "Execution timed out (10s limit)", False
+    except FileNotFoundError:
+        return "", "Node.js not available", False
+    except Exception as e:
+        return "", str(e), False
+
+@api_router.post("/code/execute", response_model=CodeExecuteResponse)
+async def execute_code(request: CodeExecuteRequest, current_user: dict = Depends(get_current_user)):
+    """Execute code and return output"""
+    import time
+    start_time = time.time()
+    
+    language = request.language.lower()
+    
+    if language == 'python':
+        output, error, success = execute_python(request.code)
+    elif language in ['javascript', 'js']:
+        output, error, success = execute_javascript(request.code)
+    elif language == 'html':
+        # HTML doesn't need execution, just return it for preview
+        output = "HTML code ready for preview"
+        error = None
+        success = True
+    else:
+        output = ""
+        error = f"Language '{language}' execution not supported yet. Supported: Python, JavaScript, HTML"
+        success = False
+    
+    execution_time = time.time() - start_time
+    
+    return CodeExecuteResponse(
+        output=output,
+        error=error,
+        execution_time=execution_time,
+        success=success
+    )
+
+# ==================== AUTO-FIX ====================
+
+@api_router.post("/code/autofix", response_model=AutoFixResponse)
+async def auto_fix_code(request: AutoFixRequest, current_user: dict = Depends(get_current_user)):
+    """Automatically fix code errors using AI"""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"autofix_{uuid.uuid4()}",
+            system_message="""You are an expert code debugger. When given code with an error, you:
+1. Identify the exact problem
+2. Fix the code
+3. Return ONLY the fixed code wrapped in ```language``` blocks
+4. After the code, briefly explain what you fixed
+
+Be concise. Fix the actual error, don't add unnecessary changes."""
+        )
+        chat.with_model("openai", "gpt-5.2")
+        
+        prompt = f"""Fix this {request.language} code that has an error:
+
+```{request.language}
+{request.code}
+```
+
+Error message:
+{request.error}
+
+Return the fixed code and a brief explanation."""
+        
+        response = await chat.send_message(UserMessage(text=prompt))
+        
+        # Extract code from response
+        fixed_code = request.code  # Default to original
+        if "```" in response:
+            parts = response.split("```")
+            for i, part in enumerate(parts):
+                if i % 2 == 1:  # Code blocks are at odd indices
+                    # Remove language identifier from first line
+                    lines = part.strip().split('\n')
+                    if lines[0].lower() in ['python', 'javascript', 'js', 'html', 'css', request.language.lower()]:
+                        fixed_code = '\n'.join(lines[1:])
+                    else:
+                        fixed_code = part.strip()
+                    break
+        
+        # Extract explanation
+        explanation = response.split("```")[-1].strip() if "```" in response else response
+        
+        return AutoFixResponse(
+            fixed_code=fixed_code,
+            explanation=explanation,
+            changes_made=["Auto-fixed based on error analysis"],
+            success=True
+        )
+        
+    except Exception as e:
+        logger.error(f"Auto-fix error: {e}")
+        return AutoFixResponse(
+            fixed_code=request.code,
+            explanation=f"Could not auto-fix: {str(e)}",
+            changes_made=[],
+            success=False
+        )
+
+# ==================== AUTO-FIX LOOP ====================
+
+@api_router.post("/code/autofix-loop")
+async def auto_fix_loop(request: CodeExecuteRequest, current_user: dict = Depends(get_current_user)):
+    """Keep fixing code until it works (max 5 attempts)"""
+    max_attempts = 5
+    current_code = request.code
+    language = request.language.lower()
+    attempts = []
+    
+    for attempt in range(max_attempts):
+        # Execute current code
+        if language == 'python':
+            output, error, success = execute_python(current_code)
+        elif language in ['javascript', 'js']:
+            output, error, success = execute_javascript(current_code)
+        else:
+            return {
+                "success": False,
+                "final_code": current_code,
+                "output": "",
+                "attempts": [{"error": f"Language '{language}' not supported for auto-fix loop"}],
+                "total_attempts": 1
+            }
+        
+        attempts.append({
+            "attempt": attempt + 1,
+            "success": success,
+            "output": output[:500] if output else "",
+            "error": error[:500] if error else None
+        })
+        
+        if success:
+            return {
+                "success": True,
+                "final_code": current_code,
+                "output": output,
+                "attempts": attempts,
+                "total_attempts": attempt + 1
+            }
+        
+        # Try to fix
+        fix_request = AutoFixRequest(
+            code=current_code,
+            language=language,
+            error=error or "Unknown error"
+        )
+        fix_response = await auto_fix_code(fix_request, current_user)
+        
+        if fix_response.success and fix_response.fixed_code != current_code:
+            current_code = fix_response.fixed_code
+        else:
+            break
+    
+    return {
+        "success": False,
+        "final_code": current_code,
+        "output": output if 'output' in dir() else "",
+        "attempts": attempts,
+        "total_attempts": len(attempts),
+        "message": "Could not fix after maximum attempts"
+    }
+
+# ==================== PROJECT MANAGEMENT ====================
+
+@api_router.post("/projects", response_model=ProjectResponse)
+async def create_project(project: ProjectCreate, current_user: dict = Depends(get_current_user)):
+    """Create a new project"""
+    project_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Create default files
+    default_files = [
+        {"name": "index.html", "content": "<!DOCTYPE html>\n<html>\n<head>\n  <title>My Project</title>\n  <link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n  <h1>Hello World</h1>\n  <script src=\"script.js\"></script>\n</body>\n</html>", "language": "html"},
+        {"name": "styles.css", "content": "body {\n  font-family: Arial, sans-serif;\n  margin: 0;\n  padding: 20px;\n}", "language": "css"},
+        {"name": "script.js", "content": "console.log('Hello from JavaScript!');", "language": "javascript"},
+        {"name": "main.py", "content": "# Python code\nprint('Hello from Python!')", "language": "python"}
+    ]
+    
+    project_doc = {
+        "id": project_id,
+        "user_id": current_user["id"],
+        "name": project.name,
+        "description": project.description,
+        "files": default_files,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.projects.insert_one(project_doc)
+    
+    return ProjectResponse(**{k: v for k, v in project_doc.items() if k != "_id" and k != "user_id"})
+
+@api_router.get("/projects", response_model=List[ProjectResponse])
+async def get_projects(current_user: dict = Depends(get_current_user)):
+    """Get all user projects"""
+    projects = await db.projects.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0, "user_id": 0}
+    ).sort("updated_at", -1).to_list(100)
+    
+    return [ProjectResponse(**p) for p in projects]
+
+@api_router.get("/projects/{project_id}", response_model=ProjectResponse)
+async def get_project(project_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a specific project"""
+    project = await db.projects.find_one(
+        {"id": project_id, "user_id": current_user["id"]},
+        {"_id": 0, "user_id": 0}
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return ProjectResponse(**project)
+
+@api_router.delete("/projects/{project_id}")
+async def delete_project(project_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a project"""
+    result = await db.projects.delete_one({"id": project_id, "user_id": current_user["id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"status": "deleted"}
+
+@api_router.post("/projects/{project_id}/files")
+async def add_file(project_id: str, file: FileCreate, current_user: dict = Depends(get_current_user)):
+    """Add a file to project"""
+    project = await db.projects.find_one({"id": project_id, "user_id": current_user["id"]})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    language = file.language or detect_language(file.name)
+    
+    new_file = {
+        "name": file.name,
+        "content": file.content,
+        "language": language
+    }
+    
+    await db.projects.update_one(
+        {"id": project_id},
+        {
+            "$push": {"files": new_file},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    return new_file
+
+@api_router.put("/projects/{project_id}/files/{filename}")
+async def update_file(project_id: str, filename: str, file: FileUpdate, current_user: dict = Depends(get_current_user)):
+    """Update a file in project"""
+    project = await db.projects.find_one({"id": project_id, "user_id": current_user["id"]})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Find and update the file
+    files = project.get("files", [])
+    file_found = False
+    for f in files:
+        if f["name"] == filename:
+            f["content"] = file.content
+            file_found = True
+            break
+    
+    if not file_found:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    await db.projects.update_one(
+        {"id": project_id},
+        {
+            "$set": {
+                "files": files,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    return {"status": "updated", "filename": filename}
+
+@api_router.delete("/projects/{project_id}/files/{filename}")
+async def delete_file(project_id: str, filename: str, current_user: dict = Depends(get_current_user)):
+    """Delete a file from project"""
+    result = await db.projects.update_one(
+        {"id": project_id, "user_id": current_user["id"]},
+        {
+            "$pull": {"files": {"name": filename}},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return {"status": "deleted", "filename": filename}
+
 # ==================== CHAT/CODE GENERATION ====================
 
 @api_router.post("/chat", response_model=ChatResponse)
@@ -208,7 +650,6 @@ async def chat_with_ai(request: ChatRequest, current_user: dict = Depends(get_cu
     message_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
-    # Get existing conversation or create new
     conversation = await db.conversations.find_one({"id": conversation_id, "user_id": current_user["id"]}, {"_id": 0})
     
     if not conversation:
@@ -221,37 +662,49 @@ async def chat_with_ai(request: ChatRequest, current_user: dict = Depends(get_cu
             "updated_at": now
         }
     
-    # Build system message for coding assistant
-    system_message = """You are an expert AI coding assistant called 'Forge AI'. You help developers with:
-- Writing clean, efficient code in any language
-- Debugging and fixing issues
-- Explaining complex concepts
-- Code reviews and best practices
-- Architecture and design patterns
+    # Enhanced system message for coding assistant
+    system_message = """You are ATOM, an expert AI coding assistant. You can:
+- Write code in ANY programming language
+- Debug and fix errors automatically
+- Explain complex concepts clearly
+- Adapt to new languages and frameworks
+- Generate complete, working solutions
 
-Always provide clear, well-structured code with explanations. Use markdown for code blocks.
-If the user provides code context, analyze it and provide relevant suggestions."""
+Guidelines:
+- Always provide complete, runnable code
+- Use markdown code blocks with language identifiers
+- Explain your code briefly
+- If you detect an error, fix it automatically
+- Be concise but thorough
+
+When writing code, always wrap it in proper markdown code blocks like:
+```python
+# code here
+```"""
 
     if request.context:
-        system_message += f"\n\nCode context provided by user:\n```\n{request.context}\n```"
+        system_message += f"\n\nProject context:\n{request.context}"
     
-    # Initialize chat
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
-        session_id=f"forge_{conversation_id}",
+        session_id=f"atom_{conversation_id}",
         system_message=system_message
     )
     chat.with_model("openai", "gpt-5.2")
     
-    # Build message history for context
-    for msg in conversation.get("messages", [])[-10:]:  # Last 10 messages
-        if msg["role"] == "user":
-            await chat.send_message(UserMessage(text=msg["content"]))
-        # Note: We're just building context, not expecting responses here
-    
-    # Send current message
     user_msg = UserMessage(text=request.message)
     response = await chat.send_message(user_msg)
+    
+    # Extract code blocks
+    code_blocks = []
+    if "```" in response:
+        parts = response.split("```")
+        for i, part in enumerate(parts):
+            if i % 2 == 1:
+                lines = part.strip().split('\n')
+                lang = lines[0].lower() if lines else 'text'
+                code = '\n'.join(lines[1:]) if len(lines) > 1 else part.strip()
+                code_blocks.append({"language": lang, "code": code})
     
     # Store messages
     conversation["messages"].append({
@@ -266,7 +719,6 @@ If the user provides code context, analyze it and provide relevant suggestions."
     })
     conversation["updated_at"] = datetime.now(timezone.utc).isoformat()
     
-    # Update in DB
     await db.conversations.update_one(
         {"id": conversation_id},
         {"$set": conversation},
@@ -276,7 +728,9 @@ If the user provides code context, analyze it and provide relevant suggestions."
     return ChatResponse(
         response=response,
         conversation_id=conversation_id,
-        message_id=message_id
+        message_id=message_id,
+        code_blocks=code_blocks if code_blocks else None,
+        auto_fix_applied=False
     )
 
 @api_router.get("/conversations", response_model=List[ConversationResponse])
@@ -310,7 +764,6 @@ async def delete_conversation(conversation_id: str, current_user: dict = Depends
 video_generation_status = {}
 
 async def generate_video_task(video_id: str, prompt: str, size: str, duration: int, user_id: str):
-    """Background task for video generation"""
     from emergentintegrations.llm.openai.video_generation import OpenAIVideoGeneration
     
     try:
@@ -331,32 +784,23 @@ async def generate_video_task(video_id: str, prompt: str, size: str, duration: i
                 "status": "completed",
                 "video_url": f"/api/media/video/{video_id}"
             }
-            
-            # Store in DB
             await db.video_generations.update_one(
                 {"id": video_id},
                 {"$set": {"status": "completed", "video_path": str(output_path)}}
             )
         else:
             video_generation_status[video_id] = {"status": "failed", "error": "Video generation failed"}
-            await db.video_generations.update_one(
-                {"id": video_id},
-                {"$set": {"status": "failed"}}
-            )
+            await db.video_generations.update_one({"id": video_id}, {"$set": {"status": "failed"}})
     except Exception as e:
         logger.error(f"Video generation error: {e}")
         video_generation_status[video_id] = {"status": "failed", "error": str(e)}
-        await db.video_generations.update_one(
-            {"id": video_id},
-            {"$set": {"status": "failed", "error": str(e)}}
-        )
+        await db.video_generations.update_one({"id": video_id}, {"$set": {"status": "failed", "error": str(e)}})
 
 @api_router.post("/video/generate", response_model=VideoGenResponse)
 async def generate_video(request: VideoGenRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
     video_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
-    # Validate parameters
     valid_sizes = ["1280x720", "1792x1024", "1024x1792", "1024x1024"]
     valid_durations = [4, 8, 12]
     
@@ -365,7 +809,6 @@ async def generate_video(request: VideoGenRequest, background_tasks: BackgroundT
     if request.duration not in valid_durations:
         raise HTTPException(status_code=400, detail=f"Invalid duration. Must be one of: {valid_durations}")
     
-    # Store initial record
     await db.video_generations.insert_one({
         "id": video_id,
         "user_id": current_user["id"],
@@ -377,17 +820,12 @@ async def generate_video(request: VideoGenRequest, background_tasks: BackgroundT
     })
     
     video_generation_status[video_id] = {"status": "processing"}
-    
-    # Start background task
-    background_tasks.add_task(
-        generate_video_task, video_id, request.prompt, request.size, request.duration, current_user["id"]
-    )
+    background_tasks.add_task(generate_video_task, video_id, request.prompt, request.size, request.duration, current_user["id"])
     
     return VideoGenResponse(video_id=video_id, status="processing")
 
 @api_router.get("/video/status/{video_id}", response_model=VideoGenResponse)
 async def get_video_status(video_id: str, current_user: dict = Depends(get_current_user)):
-    # Check in-memory status first
     if video_id in video_generation_status:
         status_info = video_generation_status[video_id]
         return VideoGenResponse(
@@ -396,11 +834,7 @@ async def get_video_status(video_id: str, current_user: dict = Depends(get_curre
             video_url=status_info.get("video_url")
         )
     
-    # Check DB
-    record = await db.video_generations.find_one(
-        {"id": video_id, "user_id": current_user["id"]},
-        {"_id": 0}
-    )
+    record = await db.video_generations.find_one({"id": video_id, "user_id": current_user["id"]}, {"_id": 0})
     if not record:
         raise HTTPException(status_code=404, detail="Video not found")
     
@@ -416,15 +850,10 @@ async def get_video(video_id: str):
 
 @api_router.get("/videos")
 async def get_user_videos(current_user: dict = Depends(get_current_user)):
-    videos = await db.video_generations.find(
-        {"user_id": current_user["id"]},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(50)
-    
+    videos = await db.video_generations.find({"user_id": current_user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
     for video in videos:
         if video.get("status") == "completed":
             video["video_url"] = f"/api/media/video/{video['id']}"
-    
     return videos
 
 # ==================== IMAGE GENERATION (NANO BANANA) ====================
@@ -450,15 +879,13 @@ async def generate_image(request: ImageGenRequest, current_user: dict = Depends(
         if not images:
             raise HTTPException(status_code=500, detail="Image generation failed - no images returned")
         
-        image_data = images[0]["data"]  # Already base64 encoded
+        image_data = images[0]["data"]
         
-        # Save to file for persistence
         image_bytes = base64.b64decode(image_data)
         image_path = MEDIA_DIR / f"{image_id}.png"
         async with aiofiles.open(image_path, 'wb') as f:
             await f.write(image_bytes)
         
-        # Store in DB
         await db.image_generations.insert_one({
             "id": image_id,
             "user_id": current_user["id"],
@@ -468,11 +895,7 @@ async def generate_image(request: ImageGenRequest, current_user: dict = Depends(
             "created_at": now
         })
         
-        return ImageGenResponse(
-            image_id=image_id,
-            image_data=image_data,
-            text_response=text_response
-        )
+        return ImageGenResponse(image_id=image_id, image_data=image_data, text_response=text_response)
         
     except Exception as e:
         logger.error(f"Image generation error: {e}")
@@ -487,66 +910,53 @@ async def get_image(image_id: str):
 
 @api_router.get("/images")
 async def get_user_images(current_user: dict = Depends(get_current_user)):
-    images = await db.image_generations.find(
-        {"user_id": current_user["id"]},
-        {"_id": 0}
-    ).sort("created_at", -1).to_list(50)
-    
+    images = await db.image_generations.find({"user_id": current_user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
     for img in images:
         img["image_url"] = f"/api/media/image/{img['id']}"
-    
     return images
 
 # ==================== SITE CLONER ====================
 
 @api_router.post("/clone/site", response_model=SiteCloneResponse)
 async def clone_site(request: SiteCloneRequest, current_user: dict = Depends(get_current_user)):
-    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
     
     clone_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
     try:
-        # Fetch the page HTML with SSL verification disabled for broader compatibility
         async with httpx.AsyncClient(timeout=30.0, verify=False, follow_redirects=True) as client:
             response = await client.get(request.url)
-            page_html = response.text[:5000]  # Limit to first 5000 chars
+            page_html = response.text[:5000]
         
-        # Use AI to generate code based on description
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"clone_{clone_id}",
-            system_message="""You are an expert web developer. When given a URL or description, generate clean, modern HTML/CSS/JS code that recreates the website design. 
-Use Tailwind CSS classes for styling. Make the code production-ready with:
-- Responsive design
-- Modern aesthetics
-- Clean, well-structured code
+            system_message="""You are an expert web developer. Generate clean, modern HTML/CSS/JS code that recreates the website design. 
+Use Tailwind CSS via CDN. Make it responsive and production-ready.
 Return ONLY the complete HTML code, no explanations."""
         )
         chat.with_model("openai", "gpt-5.2")
         
-        msg = UserMessage(text=f"""Analyze this website and create a modern clone of it.
+        msg = UserMessage(text=f"""Clone this website:
 URL: {request.url}
 
-Here's a snippet of the HTML structure:
+HTML snippet:
 {page_html}
 
-Generate a complete, standalone HTML file with embedded Tailwind CSS (via CDN) that recreates this website's design and layout. Make it responsive and visually appealing.""")
+Generate a complete, standalone HTML file with Tailwind CSS CDN.""")
         
         generated_code = await chat.send_message(msg)
         
-        # Clean up the code (remove markdown code blocks if present)
         if "```html" in generated_code:
             generated_code = generated_code.split("```html")[1].split("```")[0]
         elif "```" in generated_code:
             generated_code = generated_code.split("```")[1].split("```")[0]
         
-        # Save the generated code
         clone_path = MEDIA_DIR / f"{clone_id}.html"
         async with aiofiles.open(clone_path, 'w') as f:
             await f.write(generated_code)
         
-        # Store in DB
         await db.site_clones.insert_one({
             "id": clone_id,
             "user_id": current_user["id"],
@@ -576,27 +986,22 @@ async def preview_clone(clone_id: str):
 
 @api_router.get("/clones")
 async def get_user_clones(current_user: dict = Depends(get_current_user)):
-    clones = await db.site_clones.find(
-        {"user_id": current_user["id"]},
-        {"_id": 0, "clone_path": 0}
-    ).sort("created_at", -1).to_list(50)
-    
+    clones = await db.site_clones.find({"user_id": current_user["id"]}, {"_id": 0, "clone_path": 0}).sort("created_at", -1).to_list(50)
     for clone in clones:
         clone["preview_url"] = f"/api/clone/preview/{clone['id']}"
-    
     return clones
 
 # ==================== STATUS ====================
 
 @api_router.get("/")
 async def root():
-    return {"message": "Forge AI API is running", "version": "1.0.0"}
+    return {"message": "ATOM AI API is running", "version": "2.0.0"}
 
 @api_router.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
-# Include the router in the main app
+# Include the router
 app.include_router(api_router)
 
 app.add_middleware(

@@ -1,30 +1,30 @@
 {
   "success": false,
-  "total_tests": 12,
-  "passed_tests": 7,
+  "total_tests": 22,
+  "passed_tests": 18,
   "test_results": [
     {
       "test_name": "API Health Check",
       "success": true,
-      "timestamp": "2026-03-06T03:05:36.854824",
+      "timestamp": "2026-03-06T04:02:08.303926",
       "response_data": {
-        "message": "Forge AI API is running",
-        "version": "1.0.0"
+        "message": "ATOM AI API is running",
+        "version": "2.0.0"
       },
       "error": null
     },
     {
       "test_name": "User Registration",
       "success": true,
-      "timestamp": "2026-03-06T03:05:37.586460",
+      "timestamp": "2026-03-06T04:02:09.038204",
       "response_data": {
-        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmY2RkMjYxZS1mNDA0LTQ5MGQtODE3Zi0zM2ViZThmYjA0NDAiLCJleHAiOjE3NzI4NTI3Mzd9.36x04KE7yIUWXuOQWRSWy091QrqDyquBSBQXuafDPVo",
+        "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyYzcwYjlkMy1mYzc1LTRkODItODcxNi02NjkxODkwMjQ2YjYiLCJleHAiOjE3NzI4NTYxMjh9.f4gwGyO76p-XuPKjUZwJg4-5Tz_P7erw0Ndz8qC7j6Y",
         "token_type": "bearer",
         "user": {
-          "id": "fcdd261e-f404-490d-817f-33ebe8fb0440",
-          "email": "test_user_1772766336@forge.ai",
-          "name": "Test User 1772766336",
-          "created_at": "2026-03-06T03:05:37.071230+00:00"
+          "id": "2c70b9d3-fc75-4d82-8716-6691890246b6",
+          "email": "test_user_1772769728@forge.ai",
+          "name": "Test User 1772769728",
+          "created_at": "2026-03-06T04:02:08.583589+00:00"
         }
       },
       "error": null
@@ -32,58 +32,266 @@
     {
       "test_name": "Get User Profile",
       "success": true,
-      "timestamp": "2026-03-06T03:05:38.142513",
+      "timestamp": "2026-03-06T04:02:09.457172",
       "response_data": {
-        "id": "fcdd261e-f404-490d-817f-33ebe8fb0440",
-        "email": "test_user_1772766336@forge.ai",
-        "name": "Test User 1772766336",
-        "created_at": "2026-03-06T03:05:37.071230+00:00"
+        "id": "2c70b9d3-fc75-4d82-8716-6691890246b6",
+        "email": "test_user_1772769728@forge.ai",
+        "name": "Test User 1772769728",
+        "created_at": "2026-03-06T04:02:08.583589+00:00"
       },
       "error": null
     },
     {
       "test_name": "Send Chat Message",
       "success": true,
-      "timestamp": "2026-03-06T03:05:43.807227",
+      "timestamp": "2026-03-06T04:02:14.409816",
       "response_data": {
-        "response": "```python\ndef add(a, b):\n    \"\"\"Return the sum of two numbers.\"\"\"\n    return a + b\n```\n\nExample usage:\n\n```python\nresult = add(3, 5)\nprint(result)  # 8\n```",
-        "conversation_id": "1d0270b8-28b8-4e7f-aa9d-44df108bfc8c",
-        "message_id": "ea56956a-d1f4-4e13-9897-3e9be3c583d4"
+        "response": "```python\ndef add_two_numbers(a, b):\n    \"\"\"Return the sum of two numbers.\"\"\"\n    return a + b\n\n\n# Example usage:\nif __name__ == \"__main__\":\n    print(add_two_numbers(3, 5))  # 8\n```\n\nThis defines `add_two_numbers(a, b)` and returns `a + b`. The `__main__` block shows how to call it.",
+        "conversation_id": "a90a18bf-56e0-4997-b4e1-de062f08f211",
+        "message_id": "84a50059-ec58-422b-93a5-2678fcbef2bb",
+        "code_blocks": [
+          {
+            "language": "python",
+            "code": "def add_two_numbers(a, b):\n    \"\"\"Return the sum of two numbers.\"\"\"\n    return a + b\n\n\n# Example usage:\nif __name__ == \"__main__\":\n    print(add_two_numbers(3, 5))  # 8"
+          }
+        ],
+        "auto_fix_applied": false
       },
       "error": null
     },
     {
       "test_name": "Get Conversations",
       "success": true,
-      "timestamp": "2026-03-06T03:05:44.346222",
+      "timestamp": "2026-03-06T04:02:14.864137",
       "response_data": [
         {
-          "id": "1d0270b8-28b8-4e7f-aa9d-44df108bfc8c",
+          "id": "a90a18bf-56e0-4997-b4e1-de062f08f211",
           "title": "Hello, write a simple Python function to add two n...",
           "messages": [
             {
               "role": "user",
               "content": "Hello, write a simple Python function to add two numbers",
-              "timestamp": "2026-03-06T03:05:41.718798+00:00"
+              "timestamp": "2026-03-06T04:02:12.309144+00:00"
             },
             {
               "role": "assistant",
-              "content": "```python\ndef add(a, b):\n    \"\"\"Return the sum of two numbers.\"\"\"\n    return a + b\n```\n\nExample usage:\n\n```python\nresult = add(3, 5)\nprint(result)  # 8\n```",
-              "timestamp": "2026-03-06T03:05:43.566486+00:00"
+              "content": "```python\ndef add_two_numbers(a, b):\n    \"\"\"Return the sum of two numbers.\"\"\"\n    return a + b\n\n\n# Example usage:\nif __name__ == \"__main__\":\n    print(add_two_numbers(3, 5))  # 8\n```\n\nThis defines `add_two_numbers(a, b)` and returns `a + b`. The `__main__` block shows how to call it.",
+              "timestamp": "2026-03-06T04:02:14.176476+00:00"
             }
           ],
-          "created_at": "2026-03-06T03:05:41.718798+00:00",
-          "updated_at": "2026-03-06T03:05:43.566496+00:00"
+          "created_at": "2026-03-06T04:02:12.309144+00:00",
+          "updated_at": "2026-03-06T04:02:14.176486+00:00"
         }
       ],
       "error": null
     },
     {
+      "test_name": "Execute Python Code",
+      "success": true,
+      "timestamp": "2026-03-06T04:02:15.316675",
+      "response_data": {
+        "output": "Hello from Python!\n2 + 2 = 4\n",
+        "error": null,
+        "execution_time": 0.022728681564331055,
+        "success": true
+      },
+      "error": null
+    },
+    {
+      "test_name": "Execute JavaScript Code",
+      "success": true,
+      "timestamp": "2026-03-06T04:02:15.876120",
+      "response_data": {
+        "output": "Hello from JavaScript!\n2 + 2 = 4\n",
+        "error": null,
+        "execution_time": 0.027214527130126953,
+        "success": true
+      },
+      "error": null
+    },
+    {
+      "test_name": "Execute HTML Code",
+      "success": true,
+      "timestamp": "2026-03-06T04:02:16.275811",
+      "response_data": {
+        "output": "HTML code ready for preview",
+        "error": null,
+        "execution_time": 2.1457672119140625e-06,
+        "success": true
+      },
+      "error": null
+    },
+    {
+      "test_name": "Auto-fix Python Code",
+      "success": true,
+      "timestamp": "2026-03-06T04:02:17.939261",
+      "response_data": {
+        "fixed_code": "print('Hello World')\n# Missing closing parenthesis",
+        "explanation": "Fixed the `SyntaxError` by adding the missing closing parenthesis `)` to the `print()` call.",
+        "changes_made": [
+          "Auto-fixed based on error analysis"
+        ],
+        "success": true
+      },
+      "error": null
+    },
+    {
+      "test_name": "Auto-fix Loop",
+      "success": true,
+      "timestamp": "2026-03-06T04:02:19.622290",
+      "response_data": {
+        "success": true,
+        "final_code": "print('Hello World')\n# Missing closing parenthesis",
+        "output": "Hello World\n",
+        "attempts": [
+          {
+            "attempt": 1,
+            "success": false,
+            "output": "",
+            "error": "  File \"/tmp/tmpazycxjy2.py\", line 1\n    print('Hello World'\n         ^\nSyntaxError: '(' was never closed\n"
+          },
+          {
+            "attempt": 2,
+            "success": true,
+            "output": "Hello World\n",
+            "error": null
+          }
+        ],
+        "total_attempts": 2
+      },
+      "error": null
+    },
+    {
+      "test_name": "Create Project",
+      "success": true,
+      "timestamp": "2026-03-06T04:02:20.045580",
+      "response_data": {
+        "id": "8924d018-e615-4de5-b626-1eaf51e30082",
+        "name": "Test Project",
+        "description": "A test project for API testing",
+        "files": [
+          {
+            "name": "index.html",
+            "content": "<!DOCTYPE html>\n<html>\n<head>\n  <title>My Project</title>\n  <link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n  <h1>Hello World</h1>\n  <script src=\"script.js\"></script>\n</body>\n</html>",
+            "language": "html"
+          },
+          {
+            "name": "styles.css",
+            "content": "body {\n  font-family: Arial, sans-serif;\n  margin: 0;\n  padding: 20px;\n}",
+            "language": "css"
+          },
+          {
+            "name": "script.js",
+            "content": "console.log('Hello from JavaScript!');",
+            "language": "javascript"
+          },
+          {
+            "name": "main.py",
+            "content": "# Python code\nprint('Hello from Python!')",
+            "language": "python"
+          }
+        ],
+        "created_at": "2026-03-06T04:02:19.816835+00:00",
+        "updated_at": "2026-03-06T04:02:19.816835+00:00"
+      },
+      "error": null
+    },
+    {
+      "test_name": "Get Projects",
+      "success": true,
+      "timestamp": "2026-03-06T04:02:20.441927",
+      "response_data": [
+        {
+          "id": "8924d018-e615-4de5-b626-1eaf51e30082",
+          "name": "Test Project",
+          "description": "A test project for API testing",
+          "files": [
+            {
+              "name": "index.html",
+              "content": "<!DOCTYPE html>\n<html>\n<head>\n  <title>My Project</title>\n  <link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n  <h1>Hello World</h1>\n  <script src=\"script.js\"></script>\n</body>\n</html>",
+              "language": "html"
+            },
+            {
+              "name": "styles.css",
+              "content": "body {\n  font-family: Arial, sans-serif;\n  margin: 0;\n  padding: 20px;\n}",
+              "language": "css"
+            },
+            {
+              "name": "script.js",
+              "content": "console.log('Hello from JavaScript!');",
+              "language": "javascript"
+            },
+            {
+              "name": "main.py",
+              "content": "# Python code\nprint('Hello from Python!')",
+              "language": "python"
+            }
+          ],
+          "created_at": "2026-03-06T04:02:19.816835+00:00",
+          "updated_at": "2026-03-06T04:02:19.816835+00:00"
+        }
+      ],
+      "error": null
+    },
+    {
+      "test_name": "Get Project Details",
+      "success": true,
+      "timestamp": "2026-03-06T04:02:20.874146",
+      "response_data": {
+        "id": "8924d018-e615-4de5-b626-1eaf51e30082",
+        "name": "Test Project",
+        "description": "A test project for API testing",
+        "files": [
+          {
+            "name": "index.html",
+            "content": "<!DOCTYPE html>\n<html>\n<head>\n  <title>My Project</title>\n  <link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n  <h1>Hello World</h1>\n  <script src=\"script.js\"></script>\n</body>\n</html>",
+            "language": "html"
+          },
+          {
+            "name": "styles.css",
+            "content": "body {\n  font-family: Arial, sans-serif;\n  margin: 0;\n  padding: 20px;\n}",
+            "language": "css"
+          },
+          {
+            "name": "script.js",
+            "content": "console.log('Hello from JavaScript!');",
+            "language": "javascript"
+          },
+          {
+            "name": "main.py",
+            "content": "# Python code\nprint('Hello from Python!')",
+            "language": "python"
+          }
+        ],
+        "created_at": "2026-03-06T04:02:19.816835+00:00",
+        "updated_at": "2026-03-06T04:02:19.816835+00:00"
+      },
+      "error": null
+    },
+    {
+      "test_name": "Add File to Project",
+      "success": true,
+      "timestamp": "2026-03-06T04:02:21.305750",
+      "response_data": {
+        "name": "test.py",
+        "content": "print('Test file')",
+        "language": "python"
+      },
+      "error": null
+    },
+    {
+      "test_name": "Update File in Project",
+      "success": false,
+      "timestamp": "2026-03-06T04:02:21.306409",
+      "response_data": null,
+      "error": "Unsupported method: PUT"
+    },
+    {
       "test_name": "Start Video Generation",
       "success": true,
-      "timestamp": "2026-03-06T03:05:44.802498",
+      "timestamp": "2026-03-06T04:02:21.730582",
       "response_data": {
-        "video_id": "e22ede98-e05f-46ba-a378-ba9722e83e99",
+        "video_id": "5b4b4e25-8d29-4d27-8799-8615fa1b28bf",
         "status": "processing",
         "video_url": null
       },
@@ -92,45 +300,76 @@
     {
       "test_name": "Check Video Status",
       "success": false,
-      "timestamp": "2026-03-06T03:06:14.880985",
+      "timestamp": "2026-03-06T04:02:51.798467",
       "response_data": null,
       "error": "HTTPSConnectionPool(host='nano-dev-creator.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
     },
     {
       "test_name": "Generate Image",
       "success": false,
-      "timestamp": "2026-03-06T03:06:44.992899",
+      "timestamp": "2026-03-06T04:03:21.899389",
       "response_data": null,
       "error": "HTTPSConnectionPool(host='nano-dev-creator.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
     },
     {
       "test_name": "Clone Website",
       "success": false,
-      "timestamp": "2026-03-06T03:07:15.086426",
+      "timestamp": "2026-03-06T04:03:52.012967",
       "response_data": null,
       "error": "HTTPSConnectionPool(host='nano-dev-creator.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
     },
     {
       "test_name": "Get User Videos",
-      "success": false,
-      "timestamp": "2026-03-06T03:07:45.180158",
-      "response_data": null,
-      "error": "HTTPSConnectionPool(host='nano-dev-creator.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
+      "success": true,
+      "timestamp": "2026-03-06T04:04:04.513765",
+      "response_data": [
+        {
+          "id": "5b4b4e25-8d29-4d27-8799-8615fa1b28bf",
+          "user_id": "2c70b9d3-fc75-4d82-8716-6691890246b6",
+          "prompt": "A simple animation of a bouncing ball",
+          "size": "1280x720",
+          "duration": 4,
+          "status": "completed",
+          "created_at": "2026-03-06T04:02:21.496907+00:00",
+          "video_path": "/app/backend/media/5b4b4e25-8d29-4d27-8799-8615fa1b28bf.mp4",
+          "video_url": "/api/media/video/5b4b4e25-8d29-4d27-8799-8615fa1b28bf"
+        }
+      ],
+      "error": null
     },
     {
       "test_name": "Get User Images",
-      "success": false,
-      "timestamp": "2026-03-06T03:08:15.283671",
-      "response_data": null,
-      "error": "HTTPSConnectionPool(host='nano-dev-creator.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)"
+      "success": true,
+      "timestamp": "2026-03-06T04:04:09.112918",
+      "response_data": [
+        {
+          "id": "92b493f6-44a6-4939-a3b1-720ddb377b28",
+          "user_id": "2c70b9d3-fc75-4d82-8716-6691890246b6",
+          "prompt": "A cute robot coding at a computer",
+          "image_path": "/app/backend/media/92b493f6-44a6-4939-a3b1-720ddb377b28.png",
+          "text_response": null,
+          "created_at": "2026-03-06T04:03:42.362521+00:00",
+          "image_url": "/api/media/image/92b493f6-44a6-4939-a3b1-720ddb377b28"
+        }
+      ],
+      "error": null
     },
     {
       "test_name": "Get User Clones",
       "success": true,
-      "timestamp": "2026-03-06T03:08:33.584446",
-      "response_data": [],
+      "timestamp": "2026-03-06T04:04:09.633899",
+      "response_data": [
+        {
+          "id": "37a95a97-0e3e-48c4-98bb-e9ab44419bf9",
+          "user_id": "2c70b9d3-fc75-4d82-8716-6691890246b6",
+          "original_url": "https://example.com",
+          "status": "completed",
+          "created_at": "2026-03-06T04:04:04.277720+00:00",
+          "preview_url": "/api/clone/preview/37a95a97-0e3e-48c4-98bb-e9ab44419bf9"
+        }
+      ],
       "error": null
     }
   ],
-  "timestamp": "2026-03-06T03:08:33.585557"
+  "timestamp": "2026-03-06T04:04:09.634787"
 }
