@@ -1,0 +1,189 @@
+{
+  "project_name": "AI Coding & Media Forge",
+  "version": "1.0",
+  "theme_strategy": {
+    "mode": "dark",
+    "archetype": "Electric & Neon (The 'Cyber-Void' Variant)",
+    "description": "A high-performance command center aesthetic. Deep obsidian backgrounds, razor-sharp borders, and electric acid accents. No muddy grays. Everything is precise, intentional, and fast.",
+    "emotional_goal": "Power, Focus, Flow, Limitless Creation"
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Outfit, sans-serif",
+      "body": "Manrope, sans-serif",
+      "code": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "display": "text-6xl md:text-8xl font-bold tracking-tighter leading-none",
+      "h1": "text-4xl md:text-6xl font-bold tracking-tight",
+      "h2": "text-3xl md:text-4xl font-semibold tracking-tight",
+      "h3": "text-2xl font-medium",
+      "body_lg": "text-lg leading-relaxed text-muted-foreground",
+      "body": "text-base leading-relaxed text-muted-foreground",
+      "small": "text-sm font-medium tracking-wide uppercase text-muted-foreground/60",
+      "code": "text-sm font-mono"
+    },
+    "imports": [
+      "@fontsource/outfit/300.css",
+      "@fontsource/outfit/400.css",
+      "@fontsource/outfit/700.css",
+      "@fontsource/manrope/400.css",
+      "@fontsource/manrope/500.css",
+      "@fontsource/jetbrains-mono/400.css"
+    ]
+  },
+  "colors": {
+    "palette": {
+      "background": "#050505",
+      "foreground": "#EDEDED",
+      "card": "#0A0A0A",
+      "card_foreground": "#FFFFFF",
+      "popover": "#0F0F0F",
+      "popover_foreground": "#EDEDED",
+      "primary": "#CCFF00",
+      "primary_foreground": "#000000",
+      "secondary": "#1E1E1E",
+      "secondary_foreground": "#FFFFFF",
+      "muted": "#121212",
+      "muted_foreground": "#A1A1AA",
+      "accent": "#262626",
+      "accent_foreground": "#CCFF00",
+      "destructive": "#FF3B30",
+      "destructive_foreground": "#FFFFFF",
+      "border": "#262626",
+      "input": "#1A1A1A",
+      "ring": "#CCFF00"
+    },
+    "gradients": {
+      "hero_glow": "radial-gradient(circle at center, rgba(204, 255, 0, 0.15) 0%, transparent 70%)",
+      "code_glow": "linear-gradient(180deg, rgba(5, 5, 5, 0) 0%, #050505 100%)",
+      "glass_surface": "linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)"
+    }
+  },
+  "layout_strategies": {
+    "landing_page": {
+      "type": "Bento Grid",
+      "grid_cols": "grid-cols-1 md:grid-cols-12",
+      "gap": "gap-6 md:gap-8",
+      "sections": [
+        {
+          "name": "Hero",
+          "style": "Full height, centered typography, subtle 3D abstract background",
+          "typography": "Display size, kinetic text reveal"
+        },
+        {
+          "name": "Feature Grid",
+          "style": "Bento layout. Mix of 4x4 squares and 8x4 rectangles. High contrast borders.",
+          "hover_effect": "Glow border on hover (The 'Tracing Beam')"
+        }
+      ]
+    },
+    "app_workspace": {
+      "type": "IDE Split Pane",
+      "structure": [
+        "Sidebar (Icons only, collapsed width)",
+        "Chat Panel (30% width, retractable)",
+        "Editor/Preview (Main area)",
+        "Media Panel (Right side, retractable for Video/Image gen)"
+      ],
+      "spacing": "Dense (p-2, p-4)",
+      "borders": "1px solid #262626"
+    }
+  },
+  "visual_enhancers": {
+    "radius": {
+      "default": "rounded-none",
+      "buttons": "rounded-sm",
+      "cards": "rounded-md",
+      "inputs": "rounded-sm"
+    },
+    "shadows": {
+      "neon_glow": "0 0 10px rgba(204, 255, 0, 0.3)",
+      "panel_depth": "0 4px 20px rgba(0,0,0,0.5)"
+    },
+    "textures": {
+      "scanlines": "repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0,0,0,0.1) 3px)",
+      "noise": "url('/noise.png') opacity-5"
+    },
+    "animations": {
+      "hover_lift": "transition-transform duration-200 ease-out hover:-translate-y-1",
+      "button_press": "active:scale-95",
+      "fade_in": "animate-in fade-in zoom-in-95 duration-300"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 font-bold uppercase tracking-wider text-xs px-6 py-3 rounded-sm shadow-[0_0_10px_rgba(204,255,0,0.2)] hover:shadow-[0_0_20px_rgba(204,255,0,0.4)] transition-all",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 font-medium text-xs px-6 py-3 rounded-sm border border-border/50",
+      "ghost": "hover:bg-accent hover:text-accent-foreground text-muted-foreground"
+    },
+    "cards": {
+      "base": "bg-card border border-border/40 hover:border-primary/50 transition-colors duration-300 relative overflow-hidden group",
+      "content_padding": "p-6 md:p-8"
+    },
+    "inputs": {
+      "base": "bg-input border-transparent focus:border-primary focus:ring-1 focus:ring-primary/50 h-12 text-sm font-mono placeholder:text-muted-foreground/50 transition-all"
+    }
+  },
+  "assets": {
+    "images": [
+      {
+        "category": "Hero Background",
+        "url": "https://images.unsplash.com/photo-1720962158937-7ea890052166?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "description": "Abstract control panel, dark, moody, futuristic"
+      },
+      {
+        "category": "Feature - Code",
+        "url": "https://images.unsplash.com/photo-1717501217778-367e9cdb0e03?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "description": "Monochrome code text close-up"
+      },
+      {
+        "category": "Feature - AI Vision",
+        "url": "https://images.unsplash.com/photo-1720983415059-43ec4007cf97?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "description": "Abstract cube, AI logic visualization"
+      }
+    ],
+    "icons": {
+      "library": "lucide-react",
+      "style": "Stroke width 1.5px, crisp edges"
+    }
+  },
+  "instructions_to_main_agent": {
+    "general": [
+      "IMPLEMENT THE DARK THEME BY DEFAULT. Do not create a light mode toggle unless specifically asked later.",
+      "Use 'sonner' for all toast notifications.",
+      "Use 'framer-motion' for complex layout transitions (e.g., expanding the code editor).",
+      "Ensure all API keys (OpenAI, Sora, Nano Banana) are handled via environment variables.",
+      "MOCK the 'Site Cloning' feature initially using a simple form that accepts a URL and returns a mocked success state/image.",
+      "For the 'Code Editor', use `@monaco-editor/react` if possible, or a styled textarea as a fallback MVP.",
+      "The 'Chat Interface' should feel like a conversation with a machine, not a human. Use monospace fonts for the AI responses."
+    ],
+    "file_structure_rules": [
+      "Components go in `src/components/ui` (shadcn) or `src/components` (custom).",
+      "Pages go in `src/pages`.",
+      "Hooks go in `src/hooks`.",
+      "Utils go in `src/lib/utils.js`."
+    ]
+  },
+  "UNIVERSAL_GUIDELINES": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur)",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯📚🎭🎬🎪🎉🎊🎁🎀🎂🍰🎈🎨🎰💰💵💳🏦💎🪙💸🤑📊📈📉💹🔢🏆🥇 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN",
+    "Prioritize using pre-existing components from src/components/ui when applicable",
+    "Create new components that match the style and conventions of existing components when needed",
+    "Components MUST use named exports (export const ComponentName = ...)",
+    "Pages MUST use default exports (export default function PageName() {...})",
+    "Use `sonner` for toasts",
+    "Sonner component are located in `/app/src/components/ui/sonner.tsx`"
+  ]
+}
