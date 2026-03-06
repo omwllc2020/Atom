@@ -47,7 +47,18 @@ import {
   Zap,
   Upload,
   Image as ImageLucide,
-  Film
+  Film,
+  Sparkles,
+  Crown,
+  Bot,
+  Shield,
+  BarChart3,
+  Rocket,
+  Smartphone,
+  Brain,
+  ChevronDown,
+  Coins,
+  User
 } from 'lucide-react';
 import {
   sendChatMessage,
@@ -69,8 +80,81 @@ import {
   addFileToProject,
   updateFile,
   deleteFile,
+  getUserCredits,
   BACKEND_URL
 } from '../lib/api';
+
+// Agent definitions
+const AGENTS = [
+  { 
+    id: 'nova', 
+    name: 'Nova', 
+    role: 'Lead Architect & Developer',
+    description: 'Full-stack coding, APIs, databases, architecture',
+    icon: Code2,
+    color: 'from-blue-500 to-cyan-500'
+  },
+  { 
+    id: 'forge', 
+    name: 'Forge', 
+    role: 'Infrastructure & DevOps',
+    description: 'Containers, CI/CD, deployment, scaling',
+    icon: Settings,
+    color: 'from-orange-500 to-red-500'
+  },
+  { 
+    id: 'sentinel', 
+    name: 'Sentinel', 
+    role: 'Security & Trust',
+    description: 'Auth, encryption, vulnerability scanning',
+    icon: Shield,
+    color: 'from-green-500 to-emerald-500'
+  },
+  { 
+    id: 'atlas', 
+    name: 'Atlas', 
+    role: 'Analytics & Intelligence',
+    description: 'Metrics, insights, optimization',
+    icon: BarChart3,
+    color: 'from-purple-500 to-pink-500'
+  },
+  { 
+    id: 'pulse', 
+    name: 'Pulse', 
+    role: 'Growth & Marketing',
+    description: 'Branding, campaigns, user acquisition',
+    icon: Rocket,
+    color: 'from-yellow-500 to-orange-500'
+  }
+];
+
+// Execution modes
+const MODES = [
+  { 
+    id: 'e1', 
+    name: 'E-1', 
+    description: 'Stable & thorough',
+    badge: null
+  },
+  { 
+    id: 'e2', 
+    name: 'E-2', 
+    description: 'Thorough & Relentless',
+    badge: 'Pro'
+  },
+  { 
+    id: 'prototype', 
+    name: 'Prototype', 
+    description: 'Experimental Agent',
+    badge: null
+  },
+  { 
+    id: 'mobile', 
+    name: 'Mobile', 
+    description: 'Agent for mobile apps',
+    badge: null
+  }
+];
 
 // File icon helper
 const getFileIcon = (filename) => {
@@ -86,6 +170,186 @@ const getFileIcon = (filename) => {
   };
   return iconMap[ext] || '📄';
 };
+
+// Agent Selector Modal
+const AgentSelector = ({ isOpen, onClose, selectedMode, onSelectMode, selectedAgent, onSelectAgent, ultraThinking, onToggleUltraThinking }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 100 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 100 }}
+        className="w-full max-w-lg bg-[#0a0a0a] border border-white/10 rounded-t-2xl sm:rounded-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <h2 className="text-lg font-semibold">Select Agent</h2>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Mode Selection */}
+        <div className="p-2">
+          {MODES.map((mode) => (
+            <button
+              key={mode.id}
+              onClick={() => onSelectMode(mode.id)}
+              className={`w-full flex items-center justify-between p-4 rounded-xl transition-colors ${
+                selectedMode === mode.id 
+                  ? 'bg-white/5' 
+                  : 'hover:bg-white/5'
+              }`}
+            >
+              <div className="text-left">
+                <div className="font-semibold text-white">{mode.name}</div>
+                <div className="text-sm text-gray-400">{mode.description}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                {mode.badge && (
+                  <span className="px-2 py-1 text-xs font-medium bg-gradient-to-r from-yellow-600 to-yellow-500 text-black rounded-md flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    {mode.badge}
+                  </span>
+                )}
+                {selectedMode === mode.id && (
+                  <Check className="w-5 h-5 text-cyan-400" />
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-white/10 mx-4" />
+
+        {/* Specialized Agents */}
+        <div className="p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Specialized Agents</p>
+          <div className="grid grid-cols-2 gap-2">
+            {AGENTS.map((agent) => {
+              const IconComponent = agent.icon;
+              return (
+                <button
+                  key={agent.id}
+                  onClick={() => onSelectAgent(agent.id)}
+                  className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                    selectedAgent === agent.id 
+                      ? 'border-cyan-500/50 bg-cyan-500/10' 
+                      : 'border-white/10 hover:border-white/20 hover:bg-white/5'
+                  }`}
+                >
+                  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${agent.color} flex items-center justify-center`}>
+                    <IconComponent className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{agent.name}</div>
+                    <div className="text-xs text-gray-500 truncate">{agent.role}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Ultra Thinking Toggle */}
+        <div className="p-4 border-t border-white/10">
+          <button
+            onClick={onToggleUltraThinking}
+            className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${
+              ultraThinking 
+                ? 'bg-gradient-to-r from-purple-500/20 to-blue-500/20 border-purple-500/50' 
+                : 'bg-gradient-to-r from-purple-500/10 to-blue-500/10 border-purple-500/20'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center ${ultraThinking ? 'animate-pulse' : ''}`}>
+                <Brain className="w-5 h-5 text-white" />
+              </div>
+              <div className="text-left">
+                <div className="font-medium text-sm">Ultra Thinking</div>
+                <div className="text-xs text-gray-500">Deep multi-step reasoning</div>
+              </div>
+            </div>
+            <div className={`w-11 h-6 rounded-full transition-colors relative ${ultraThinking ? 'bg-purple-500' : 'bg-gray-700'}`}>
+              <div className={`absolute top-[2px] w-5 h-5 bg-white rounded-full transition-transform ${ultraThinking ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
+            </div>
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+// Top Header with Welcome, Credits, and Agent Selection
+const WorkspaceHeader = ({ user, credits, isSuperAdmin, selectedMode, selectedAgent, onOpenAgentSelector }) => {
+  const currentMode = MODES.find(m => m.id === selectedMode);
+  const currentAgent = AGENTS.find(a => a.id === selectedAgent);
+  
+  return (
+    <div className="h-12 px-4 flex items-center justify-between border-b border-white/10 bg-[#050505]">
+      {/* Welcome Message */}
+      <div className="flex items-center gap-3">
+        <span className="text-xs tracking-[0.3em] text-cyan-400/80 font-light">
+          WELCOME, <span className="text-cyan-400">{user?.name?.toUpperCase() || 'USER'}</span>
+        </span>
+        {isSuperAdmin && (
+          <span className="px-2 py-0.5 text-[10px] font-bold bg-gradient-to-r from-yellow-500 to-orange-500 text-black rounded-full flex items-center gap-1">
+            <Crown className="w-3 h-3" />
+            SUPER ADMIN
+          </span>
+        )}
+      </div>
+
+      {/* Right Side */}
+      <div className="flex items-center gap-3">
+        {/* Agent/Mode Selector Button */}
+        <button
+          onClick={onOpenAgentSelector}
+          className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors"
+        >
+          <div className={`w-5 h-5 rounded bg-gradient-to-br ${currentAgent?.color || 'from-blue-500 to-cyan-500'} flex items-center justify-center`}>
+            {currentAgent ? <currentAgent.icon className="w-3 h-3 text-white" /> : <Bot className="w-3 h-3 text-white" />}
+          </div>
+          <span className="text-sm font-medium">{currentMode?.name || 'E-1'}</span>
+          <ChevronDown className="w-4 h-4 text-gray-400" />
+        </button>
+
+        {/* Credits Display - Hidden for Super Admin */}
+        {!isSuperAdmin && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-full">
+            <Coins className="w-4 h-4 text-yellow-500" />
+            <span className="text-sm font-semibold text-yellow-400">{credits?.toFixed(2) || '0.00'}</span>
+          </div>
+        )}
+
+        {/* Unlimited badge for Super Admin */}
+        {isSuperAdmin && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/30 rounded-full">
+            <Zap className="w-4 h-4 text-purple-400" />
+            <span className="text-sm font-semibold text-purple-400">UNLIMITED</span>
+          </div>
+        )}
+
+        {/* Notifications */}
+        <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+          <Bell className="w-5 h-5 text-gray-400" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Bell icon component (since lucide-react might not have it imported)
+const Bell = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </svg>
+);
 
 // Mobile Bottom Nav
 const MobileNav = ({ activeTab, setActiveTab }) => {
@@ -595,11 +859,14 @@ const IDEPanel = () => {
 };
 
 // Chat Panel
-const ChatPanel = ({ conversationId, setConversationId, onRefresh }) => {
+const ChatPanel = ({ conversationId, setConversationId, onRefresh, selectedAgent, selectedMode, ultraThinking }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  
+  const currentAgent = AGENTS.find(a => a.id === selectedAgent) || AGENTS[0];
+  const currentMode = MODES.find(m => m.id === selectedMode) || MODES[0];
 
   useEffect(() => {
     if (conversationId) {
@@ -631,16 +898,31 @@ const ChatPanel = ({ conversationId, setConversationId, onRefresh }) => {
     setLoading(true);
 
     try {
-      const response = await sendChatMessage(userMessage, conversationId);
+      const response = await sendChatMessage(
+        userMessage, 
+        conversationId, 
+        null, 
+        null, 
+        false,
+        selectedAgent,
+        selectedMode,
+        ultraThinking
+      );
       setConversationId(response.conversation_id);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: response.response, 
-        timestamp: new Date().toISOString() 
+        timestamp: new Date().toISOString(),
+        agent: selectedAgent,
+        mode: selectedMode
       }]);
       onRefresh();
     } catch (error) {
-      toast.error('Failed to send message');
+      if (error.response?.status === 402) {
+        toast.error('Insufficient credits. Please upgrade your plan.');
+      } else {
+        toast.error('Failed to send message');
+      }
       setMessages(prev => prev.slice(0, -1));
     } finally {
       setLoading(false);
@@ -654,6 +936,7 @@ const ChatPanel = ({ conversationId, setConversationId, onRefresh }) => {
 
   const renderMessage = (msg, idx) => {
     const isUser = msg.role === 'user';
+    const AgentIcon = currentAgent.icon;
     
     const renderContent = (content) => {
       const parts = content.split(/(```[\s\S]*?```)/g);
@@ -686,11 +969,11 @@ const ChatPanel = ({ conversationId, setConversationId, onRefresh }) => {
         className={`p-4 ${isUser ? 'chat-message-user' : 'chat-message-assistant'} mx-2 md:mx-4 mb-3`}
       >
         <div className="flex items-start gap-3">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isUser ? 'bg-gradient-to-br from-blue-500 to-purple-600' : 'bg-white/10'}`}>
-            {isUser ? <span className="text-xs font-bold text-white">U</span> : <Atom className="w-4 h-4 text-blue-400" strokeWidth={2} />}
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isUser ? 'bg-gradient-to-br from-blue-500 to-purple-600' : `bg-gradient-to-br ${currentAgent.color}`}`}>
+            {isUser ? <span className="text-xs font-bold text-white">U</span> : <AgentIcon className="w-4 h-4 text-white" strokeWidth={2} />}
           </div>
           <div className="flex-1 min-w-0 overflow-hidden">
-            <div className="text-xs text-muted-foreground mb-1">{isUser ? 'You' : 'ATOM AI'}</div>
+            <div className="text-xs text-muted-foreground mb-1">{isUser ? 'You' : `${currentAgent.name} • ${currentMode.name}`}</div>
             <div className={`text-sm leading-relaxed ${!isUser ? 'font-mono' : ''}`}>{renderContent(msg.content)}</div>
           </div>
         </div>
@@ -700,10 +983,15 @@ const ChatPanel = ({ conversationId, setConversationId, onRefresh }) => {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="h-14 px-4 flex items-center justify-between border-b border-white/10 shrink-0">
-        <div className="flex items-center gap-2">
-          <Zap className="w-5 h-5 text-blue-400" strokeWidth={1.5} />
-          <span className="font-semibold">AI Assistant</span>
+      <div className="h-12 px-4 flex items-center justify-between border-b border-white/10 shrink-0 bg-[#050505]">
+        <div className="flex items-center gap-3">
+          <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${currentAgent.color} flex items-center justify-center`}>
+            <currentAgent.icon className="w-4 h-4 text-white" strokeWidth={2} />
+          </div>
+          <div>
+            <span className="font-semibold text-sm">{currentAgent.name}</span>
+            <span className="text-xs text-gray-500 ml-2">{currentAgent.role}</span>
+          </div>
         </div>
         <Button size="sm" variant="ghost" onClick={() => { setConversationId(null); setMessages([]); }} className="h-8">
           <Plus className="w-4 h-4 mr-1" />New
@@ -714,22 +1002,27 @@ const ChatPanel = ({ conversationId, setConversationId, onRefresh }) => {
         <div className="py-4">
           {messages.length === 0 ? (
             <div className="text-center py-16 px-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mx-auto mb-4">
-                <Atom className="w-8 h-8 text-blue-400" strokeWidth={1.5} />
+              <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${currentAgent.color} flex items-center justify-center mx-auto mb-4 shadow-lg`}>
+                <currentAgent.icon className="w-10 h-10 text-white" strokeWidth={1.5} />
               </div>
-              <h3 className="text-lg font-semibold mb-2">How can I help?</h3>
-              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                Ask me to write code in any language, debug issues, explain concepts, or build entire projects.
+              <h3 className="text-xl font-semibold mb-2">{currentAgent.name} is ready</h3>
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">
+                {currentAgent.description}
               </p>
+              <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+                <span className="px-2 py-1 bg-white/5 rounded">{currentMode.name}</span>
+                <span>•</span>
+                <span>{currentMode.description}</span>
+              </div>
             </div>
           ) : messages.map((msg, idx) => renderMessage(msg, idx))}
           {loading && (
             <div className="p-4 chat-message-assistant mx-2 md:mx-4">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
-                  <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${currentAgent.color} flex items-center justify-center`}>
+                  <Loader2 className="w-4 h-4 text-white animate-spin" />
                 </div>
-                <span className="text-sm text-muted-foreground">Thinking...</span>
+                <span className="text-sm text-muted-foreground">{currentAgent.name} is thinking...</span>
               </div>
             </div>
           )}
@@ -1141,17 +1434,48 @@ export default function WorkspacePage() {
   const [activeTab, setActiveTab] = useState('chat');
   const [conversationId, setConversationId] = useState(null);
   const [conversations, setConversations] = useState([]);
+  
+  // Agent & Mode Selection
+  const [showAgentSelector, setShowAgentSelector] = useState(false);
+  const [selectedMode, setSelectedMode] = useState('e1');
+  const [selectedAgent, setSelectedAgent] = useState('nova');
+  const [ultraThinking, setUltraThinking] = useState(false);
+  
+  // Credits & Super Admin
+  const [credits, setCredits] = useState(10.00);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate('/login');
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    if (user) loadConversations();
+    if (user) {
+      loadConversations();
+      loadUserCredits();
+    }
   }, [user]);
 
   const loadConversations = async () => {
     try { setConversations(await getConversations()); } catch (e) { console.error(e); }
+  };
+
+  const loadUserCredits = async () => {
+    try {
+      const data = await getUserCredits();
+      setIsSuperAdmin(data.is_super_admin || false);
+      if (!data.unlimited) {
+        setCredits(data.credits || 0);
+      }
+    } catch (e) { 
+      console.error('Failed to load credits:', e); 
+    }
+  };
+
+  // Refresh credits after each chat
+  const handleChatRefresh = async () => {
+    await loadConversations();
+    await loadUserCredits();
   };
 
   if (authLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-8 h-8 text-blue-400 animate-spin" /></div>;
@@ -1161,18 +1485,65 @@ export default function WorkspacePage() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} />
       
-      <div className="flex-1 h-screen overflow-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div key={activeTab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="h-full">
-            {activeTab === 'chat' && <ChatPanel conversationId={conversationId} setConversationId={setConversationId} onRefresh={loadConversations} />}
-            {activeTab === 'ide' && <IDEPanel />}
-            {activeTab === 'video' && <VideoPanel />}
-            {activeTab === 'image' && <ImagePanel />}
-            {activeTab === 'clone' && <ClonePanel />}
-            {activeTab === 'history' && <HistoryPanel conversations={conversations} onSelect={(id) => { setConversationId(id); setActiveTab('chat'); }} onDelete={async (id) => { await deleteConversation(id); loadConversations(); if (conversationId === id) setConversationId(null); }} onRefresh={loadConversations} />}
-          </motion.div>
-        </AnimatePresence>
+      <div className="flex-1 h-screen overflow-hidden flex flex-col">
+        {/* Header with Welcome & Credits */}
+        <WorkspaceHeader 
+          user={user}
+          credits={credits}
+          isSuperAdmin={isSuperAdmin}
+          selectedMode={selectedMode}
+          selectedAgent={selectedAgent}
+          onOpenAgentSelector={() => setShowAgentSelector(true)}
+        />
+        
+        {/* Main Content */}
+        <div className="flex-1 overflow-hidden">
+          <AnimatePresence mode="wait">
+            <motion.div key={activeTab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="h-full">
+              {activeTab === 'chat' && (
+                <ChatPanel 
+                  conversationId={conversationId} 
+                  setConversationId={setConversationId} 
+                  onRefresh={handleChatRefresh} 
+                  selectedAgent={selectedAgent} 
+                  selectedMode={selectedMode}
+                  ultraThinking={ultraThinking}
+                />
+              )}
+              {activeTab === 'ide' && <IDEPanel />}
+              {activeTab === 'video' && <VideoPanel />}
+              {activeTab === 'image' && <ImagePanel />}
+              {activeTab === 'clone' && <ClonePanel />}
+              {activeTab === 'history' && <HistoryPanel conversations={conversations} onSelect={(id) => { setConversationId(id); setActiveTab('chat'); }} onDelete={async (id) => { await deleteConversation(id); loadConversations(); if (conversationId === id) setConversationId(null); }} onRefresh={loadConversations} />}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
+
+      {/* Agent Selector Modal */}
+      <AnimatePresence>
+        {showAgentSelector && (
+          <AgentSelector 
+            isOpen={showAgentSelector}
+            onClose={() => setShowAgentSelector(false)}
+            selectedMode={selectedMode}
+            onSelectMode={(mode) => {
+              setSelectedMode(mode);
+              toast.success(`Switched to ${MODES.find(m => m.id === mode)?.name} mode`);
+            }}
+            selectedAgent={selectedAgent}
+            onSelectAgent={(agent) => {
+              setSelectedAgent(agent);
+              toast.success(`${AGENTS.find(a => a.id === agent)?.name} agent activated`);
+            }}
+            ultraThinking={ultraThinking}
+            onToggleUltraThinking={() => {
+              setUltraThinking(!ultraThinking);
+              toast.success(ultraThinking ? 'Ultra Thinking disabled' : 'Ultra Thinking enabled');
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

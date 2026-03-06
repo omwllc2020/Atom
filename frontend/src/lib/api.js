@@ -9,13 +9,16 @@ const getAuthHeader = () => {
 };
 
 // Chat/Code Generation
-export const sendChatMessage = async (message, conversationId = null, context = null, projectId = null, autoFix = false) => {
+export const sendChatMessage = async (message, conversationId = null, context = null, projectId = null, autoFix = false, agent = 'nova', mode = 'e1', ultraThinking = false) => {
   const response = await axios.post(`${API}/chat`, {
     message,
     conversation_id: conversationId,
     context,
     project_id: projectId,
-    auto_fix: autoFix
+    auto_fix: autoFix,
+    agent,
+    mode,
+    ultra_thinking: ultraThinking
   }, { headers: getAuthHeader() });
   return response.data;
 };
@@ -164,6 +167,17 @@ export const cloneSite = async (url) => {
 
 export const getUserClones = async () => {
   const response = await axios.get(`${API}/clones`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+// User/Credits
+export const getUserCredits = async () => {
+  const response = await axios.get(`${API}/user/credits`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const getAgents = async () => {
+  const response = await axios.get(`${API}/agents`);
   return response.data;
 };
 

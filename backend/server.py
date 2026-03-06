@@ -39,6 +39,175 @@ JWT_EXPIRATION_HOURS = 24
 # Emergent LLM Key
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
 
+# Super Admin Configuration
+SUPER_ADMIN_EMAIL = "Antoniohoshaw6@gmail.com"
+
+# Agent Definitions with System Prompts
+AGENT_CONFIGS = {
+    "nova": {
+        "name": "Nova",
+        "role": "Lead Architect & Developer",
+        "capabilities": ["Full-stack development", "API design", "Database architecture", "Code optimization"],
+        "system_prompt": """You are Nova, the Lead Architect & Developer agent in the ATOM Core system.
+
+Your expertise:
+- Full-stack application development (frontend & backend)
+- API design and REST/GraphQL architecture
+- Database modeling and optimization (SQL, NoSQL)
+- Clean code principles and design patterns
+- Performance optimization and scalability
+
+Guidelines:
+- Write production-ready, maintainable code
+- Follow best practices for the language/framework being used
+- Explain architectural decisions clearly
+- Suggest improvements when you see anti-patterns
+- Use proper error handling and edge case management
+
+When writing code:
+- Always use markdown code blocks with language identifiers
+- Include comments for complex logic
+- Consider security implications
+- Think about testability"""
+    },
+    "forge": {
+        "name": "Forge",
+        "role": "Infrastructure & DevOps",
+        "capabilities": ["CI/CD pipelines", "Container orchestration", "Cloud deployment", "System automation"],
+        "system_prompt": """You are Forge, the Infrastructure & DevOps agent in the ATOM Core system.
+
+Your expertise:
+- Docker and Kubernetes container orchestration
+- CI/CD pipeline design (GitHub Actions, Jenkins, GitLab CI)
+- Cloud platforms (AWS, GCP, Azure)
+- Infrastructure as Code (Terraform, Pulumi)
+- System monitoring and observability
+- Automated deployment strategies
+
+Guidelines:
+- Prioritize reliability and reproducibility
+- Implement proper secrets management
+- Design for horizontal scaling
+- Include health checks and rollback strategies
+- Document deployment procedures
+
+When providing solutions:
+- Use markdown code blocks for configs (yaml, docker, terraform)
+- Consider cost optimization
+- Implement proper logging and monitoring
+- Think about disaster recovery"""
+    },
+    "sentinel": {
+        "name": "Sentinel",
+        "role": "Security & Trust",
+        "capabilities": ["Authentication systems", "Encryption", "Vulnerability scanning", "Compliance"],
+        "system_prompt": """You are Sentinel, the Security & Trust agent in the ATOM Core system.
+
+Your expertise:
+- Authentication and authorization (OAuth, JWT, RBAC)
+- Encryption and cryptography best practices
+- Security vulnerability assessment (OWASP Top 10)
+- Secure coding practices
+- Compliance frameworks (SOC2, GDPR, HIPAA)
+- Penetration testing methodologies
+
+Guidelines:
+- Always assume zero trust
+- Never expose sensitive data in logs or responses
+- Use parameterized queries to prevent injection
+- Implement proper input validation
+- Follow principle of least privilege
+
+When providing solutions:
+- Highlight security implications
+- Suggest additional hardening measures
+- Include audit logging considerations
+- Consider both known and emerging threats"""
+    },
+    "atlas": {
+        "name": "Atlas",
+        "role": "Analytics & Intelligence",
+        "capabilities": ["Data analysis", "Metrics dashboards", "A/B testing", "Performance optimization"],
+        "system_prompt": """You are Atlas, the Analytics & Intelligence agent in the ATOM Core system.
+
+Your expertise:
+- Data analysis and visualization
+- Metrics design and KPI definition
+- A/B testing and experimentation frameworks
+- Database query optimization
+- Machine learning model integration
+- Real-time analytics pipelines
+
+Guidelines:
+- Focus on actionable insights
+- Design for statistical significance
+- Consider data privacy and anonymization
+- Optimize for query performance
+- Make dashboards intuitive and informative
+
+When providing solutions:
+- Include sample queries and visualizations
+- Explain statistical concepts clearly
+- Consider edge cases in data
+- Think about data freshness and latency"""
+    },
+    "pulse": {
+        "name": "Pulse",
+        "role": "Growth & Marketing",
+        "capabilities": ["Campaign automation", "User acquisition", "Branding", "Content strategy"],
+        "system_prompt": """You are Pulse, the Growth & Marketing agent in the ATOM Core system.
+
+Your expertise:
+- Marketing automation and email campaigns
+- User acquisition and retention strategies
+- Brand identity and messaging
+- Content strategy and SEO optimization
+- Social media integration
+- Conversion funnel optimization
+
+Guidelines:
+- Focus on user engagement and conversion
+- Write compelling copy that converts
+- Consider brand consistency
+- Design for A/B testing
+- Think about user psychology
+
+When providing solutions:
+- Include marketing copy examples
+- Suggest tracking and attribution
+- Consider multi-channel strategies
+- Focus on measurable outcomes"""
+    }
+}
+
+# Mode Configurations
+MODE_CONFIGS = {
+    "e1": {
+        "name": "E-1",
+        "description": "Stable & thorough",
+        "temperature": 0.7,
+        "modifier": "Be thorough and explain your reasoning. Focus on stability and correctness."
+    },
+    "e2": {
+        "name": "E-2", 
+        "description": "Thorough & Relentless",
+        "temperature": 0.8,
+        "modifier": "Be extremely thorough. Explore multiple approaches. Don't give up easily - keep iterating until the solution is optimal."
+    },
+    "prototype": {
+        "name": "Prototype",
+        "description": "Experimental Agent",
+        "temperature": 0.9,
+        "modifier": "Be creative and experimental. Try unconventional approaches. Prioritize innovation over convention."
+    },
+    "mobile": {
+        "name": "Mobile",
+        "description": "Agent for mobile apps",
+        "temperature": 0.7,
+        "modifier": "Focus on mobile-first design patterns. Consider touch interfaces, responsive layouts, offline capabilities, and mobile performance optimization."
+    }
+}
+
 # Create the main app
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -79,6 +248,9 @@ class UserResponse(BaseModel):
     email: str
     name: str
     created_at: str
+    role: str = "user"
+    credits: float = 10.0
+    is_super_admin: bool = False
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -96,6 +268,9 @@ class ChatRequest(BaseModel):
     context: Optional[str] = None
     project_id: Optional[str] = None
     auto_fix: bool = False
+    agent: Optional[str] = "nova"  # nova, forge, sentinel, atlas, pulse
+    mode: Optional[str] = "e1"  # e1, e2, prototype, mobile
+    ultra_thinking: bool = False
 
 class ChatResponse(BaseModel):
     response: str
@@ -203,6 +378,18 @@ def create_token(user_id: str) -> str:
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
+def is_super_admin(email: str) -> bool:
+    """Check if user is super admin based on email"""
+    return email.lower() == SUPER_ADMIN_EMAIL.lower()
+
+def get_user_role(email: str) -> str:
+    """Get user role based on email"""
+    return "super_admin" if is_super_admin(email) else "user"
+
+def get_user_credits(email: str) -> float:
+    """Get user credits - -1 for super admin (unlimited)"""
+    return -1 if is_super_admin(email) else 10.0
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -210,6 +397,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
+        # Add computed fields
+        user["role"] = get_user_role(user.get("email", ""))
+        user["is_super_admin"] = is_super_admin(user.get("email", ""))
+        # -1 credits indicates unlimited for super admin
+        if user["is_super_admin"]:
+            user["credits"] = -1
+        else:
+            user["credits"] = user.get("credits", 10.0)
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
@@ -227,11 +422,19 @@ async def register(user_data: UserCreate):
     user_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     
+    # Determine role and credits based on email
+    role = get_user_role(user_data.email)
+    is_admin = is_super_admin(user_data.email)
+    credits = -1 if is_admin else 10.0  # -1 indicates unlimited
+    
     user_doc = {
         "id": user_id,
         "email": user_data.email,
         "password": hash_password(user_data.password),
         "name": user_data.name,
+        "role": role,
+        "credits": credits,
+        "is_super_admin": is_admin,
         "created_at": now
     }
     
@@ -240,7 +443,15 @@ async def register(user_data: UserCreate):
     token = create_token(user_id)
     return TokenResponse(
         access_token=token,
-        user=UserResponse(id=user_id, email=user_data.email, name=user_data.name, created_at=now)
+        user=UserResponse(
+            id=user_id, 
+            email=user_data.email, 
+            name=user_data.name, 
+            created_at=now,
+            role=role,
+            credits=credits,
+            is_super_admin=is_admin
+        )
     )
 
 @api_router.post("/auth/login", response_model=TokenResponse)
@@ -249,6 +460,11 @@ async def login(credentials: UserLogin):
     if not user or not verify_password(credentials.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
+    # Get role and credits
+    role = get_user_role(user["email"])
+    is_admin = is_super_admin(user["email"])
+    credits = -1 if is_admin else user.get("credits", 10.0)  # -1 indicates unlimited
+    
     token = create_token(user["id"])
     return TokenResponse(
         access_token=token,
@@ -256,13 +472,57 @@ async def login(credentials: UserLogin):
             id=user["id"],
             email=user["email"],
             name=user["name"],
-            created_at=user["created_at"]
+            created_at=user["created_at"],
+            role=role,
+            credits=credits,
+            is_super_admin=is_admin
         )
     )
 
 @api_router.get("/auth/me", response_model=UserResponse)
 async def get_me(current_user: dict = Depends(get_current_user)):
-    return UserResponse(**current_user)
+    return UserResponse(
+        id=current_user["id"],
+        email=current_user["email"],
+        name=current_user["name"],
+        created_at=current_user["created_at"],
+        role=current_user.get("role", "user"),
+        credits=current_user.get("credits", 10.0),
+        is_super_admin=current_user.get("is_super_admin", False)
+    )
+
+@api_router.get("/user/credits")
+async def get_user_credits_endpoint(current_user: dict = Depends(get_current_user)):
+    """Get current user's credit balance"""
+    is_admin = current_user.get("is_super_admin", False)
+    return {
+        "credits": None if is_admin else current_user.get("credits", 10.0),
+        "is_super_admin": is_admin,
+        "unlimited": is_admin
+    }
+
+@api_router.get("/agents")
+async def get_agents():
+    """Get available agents and their capabilities"""
+    return {
+        "agents": [
+            {
+                "id": agent_id,
+                "name": config["name"],
+                "role": config["role"],
+                "capabilities": config["capabilities"]
+            }
+            for agent_id, config in AGENT_CONFIGS.items()
+        ],
+        "modes": [
+            {
+                "id": mode_id,
+                "name": config["name"],
+                "description": config["description"]
+            }
+            for mode_id, config in MODE_CONFIGS.items()
+        ]
+    }
 
 # ==================== CODE EXECUTION ====================
 
@@ -646,6 +906,35 @@ async def delete_file(project_id: str, filename: str, current_user: dict = Depen
 
 # ==================== CHAT/CODE GENERATION ====================
 
+def build_agent_system_prompt(agent: str, mode: str, ultra_thinking: bool, context: Optional[str] = None) -> str:
+    """Build the complete system prompt based on agent, mode, and settings"""
+    agent_config = AGENT_CONFIGS.get(agent, AGENT_CONFIGS["nova"])
+    mode_config = MODE_CONFIGS.get(mode, MODE_CONFIGS["e1"])
+    
+    # Start with agent's base prompt
+    system_prompt = agent_config["system_prompt"]
+    
+    # Add mode modifier
+    system_prompt += f"\n\nExecution Mode: {mode_config['name']}\n{mode_config['modifier']}"
+    
+    # Add ultra thinking if enabled
+    if ultra_thinking:
+        system_prompt += """
+
+ULTRA THINKING MODE ACTIVATED:
+- Break down complex problems into smaller steps
+- Show your reasoning process explicitly
+- Consider multiple approaches before settling on one
+- Validate your assumptions
+- Think about edge cases and potential issues
+- Provide more detailed explanations"""
+    
+    # Add context if provided
+    if context:
+        system_prompt += f"\n\nProject context:\n{context}"
+    
+    return system_prompt
+
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -653,6 +942,12 @@ async def chat_with_ai(request: ChatRequest, current_user: dict = Depends(get_cu
     conversation_id = request.conversation_id or str(uuid.uuid4())
     message_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+    
+    # Check credits for non-super-admin users
+    if not current_user.get("is_super_admin", False):
+        user_credits = current_user.get("credits", 0)
+        if user_credits <= 0:
+            raise HTTPException(status_code=402, detail="Insufficient credits. Please upgrade your plan.")
     
     conversation = await db.conversations.find_one({"id": conversation_id, "user_id": current_user["id"]}, {"_id": 0})
     
@@ -662,36 +957,27 @@ async def chat_with_ai(request: ChatRequest, current_user: dict = Depends(get_cu
             "user_id": current_user["id"],
             "title": request.message[:50] + "..." if len(request.message) > 50 else request.message,
             "messages": [],
+            "agent": request.agent,
+            "mode": request.mode,
             "created_at": now,
             "updated_at": now
         }
     
-    # Enhanced system message for coding assistant
-    system_message = """You are ATOM, an expert AI coding assistant. You can:
-- Write code in ANY programming language
-- Debug and fix errors automatically
-- Explain complex concepts clearly
-- Adapt to new languages and frameworks
-- Generate complete, working solutions
-
-Guidelines:
-- Always provide complete, runnable code
-- Use markdown code blocks with language identifiers
-- Explain your code briefly
-- If you detect an error, fix it automatically
-- Be concise but thorough
-
-When writing code, always wrap it in proper markdown code blocks like:
-```python
-# code here
-```"""
-
-    if request.context:
-        system_message += f"\n\nProject context:\n{request.context}"
+    # Build dynamic system prompt based on agent, mode, and settings
+    system_message = build_agent_system_prompt(
+        agent=request.agent or "nova",
+        mode=request.mode or "e1",
+        ultra_thinking=request.ultra_thinking,
+        context=request.context
+    )
+    
+    # Get agent config for session naming
+    agent_config = AGENT_CONFIGS.get(request.agent or "nova", AGENT_CONFIGS["nova"])
+    mode_config = MODE_CONFIGS.get(request.mode or "e1", MODE_CONFIGS["e1"])
     
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
-        session_id=f"atom_{conversation_id}",
+        session_id=f"atom_{agent_config['name'].lower()}_{conversation_id}",
         system_message=system_message
     )
     chat.with_model("openai", "gpt-5.2")
@@ -710,7 +996,7 @@ When writing code, always wrap it in proper markdown code blocks like:
                 code = '\n'.join(lines[1:]) if len(lines) > 1 else part.strip()
                 code_blocks.append({"language": lang, "code": code})
     
-    # Store messages
+    # Store messages with agent/mode metadata
     conversation["messages"].append({
         "role": "user",
         "content": request.message,
@@ -719,15 +1005,26 @@ When writing code, always wrap it in proper markdown code blocks like:
     conversation["messages"].append({
         "role": "assistant", 
         "content": response,
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "agent": request.agent,
+        "mode": request.mode
     })
     conversation["updated_at"] = datetime.now(timezone.utc).isoformat()
+    conversation["agent"] = request.agent
+    conversation["mode"] = request.mode
     
     await db.conversations.update_one(
         {"id": conversation_id},
         {"$set": conversation},
         upsert=True
     )
+    
+    # Deduct credits for non-super-admin users
+    if not current_user.get("is_super_admin", False):
+        await db.users.update_one(
+            {"id": current_user["id"]},
+            {"$inc": {"credits": -0.1}}  # Deduct 0.1 credits per message
+        )
     
     return ChatResponse(
         response=response,
