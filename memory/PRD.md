@@ -1,7 +1,7 @@
 # ATOM - AI Coding & Media Generation App
 
 ## Original Problem Statement
-Build an AI coding app with ALL features like an AI assistant: code execution, automatic testing, auto-fix that keeps trying until code works, multi-file projects, video generation (Sora 2), image generation (Nano Banana), and site cloning. Includes multi-agent system (ATOM Core) with specialized agents and super admin functionality.
+Build an AI coding app with ALL features like an AI assistant: code execution, automatic testing, auto-fix that keeps trying until code works, multi-file projects, video generation (Sora 2), image generation (Nano Banana), and site cloning. Includes multi-agent system (ATOM Core) with specialized agents, super admin functionality, and Stripe payment integration matching Replit's pricing model.
 
 ## User Personas
 1. **Developers** - Need AI assistance + code execution + auto-debugging
@@ -25,57 +25,75 @@ Build an AI coding app with ALL features like an AI assistant: code execution, a
 - [x] Multi-Agent System (ATOM Core)
 - [x] Super Admin Role System
 - [x] Credits System
-- [x] Subscription Plans
-- [x] Usage Tracking
-- [x] Admin Dashboard API
+- [x] **Stripe Payment Integration**
+- [x] **Subscription Plans (Replit-style)**
+- [x] **Credit Top-ups**
+- [x] **Mobile Responsive UI**
+
+## Pricing Model (Replit-style)
+
+### Subscription Plans
+| Plan | Monthly Price | Credits/Month | Target User |
+|------|---------------|---------------|-------------|
+| Free | $0 | $10 | Beginners |
+| Core | $20 | $25 | Solo developers |
+| Pro | $40 | $50 | Power users |
+| Enterprise | $99 | Unlimited | Large teams |
+
+### Credit Packages (Top-ups)
+| Package | Credits | Price |
+|---------|---------|-------|
+| Small | $10 | $5 |
+| Medium | $25 | $10 |
+| Large | $50 | $18 |
+| XL | $100 | $30 |
+
+### Credit Costs
+| Action | Cost |
+|--------|------|
+| Chat message | $0.10 |
+| Ultra Thinking (extra) | $0.15 |
+| Code execution | $0.05 |
+| Video generation | $2.50 |
+| Image generation | $0.25 |
+| Agent checkpoint | $0.25 |
+| Site clone | $1.00 |
 
 ## Implementation History
 
-### Phase 1: Core Features
+### Phase 1-4: Core Features
 - Landing page, auth, chat workspace
-- Video, image, site clone panels
-- MongoDB persistence
+- ATOM branding, mobile responsive
+- IDE with code execution, auto-fix
+- Multi-agent system (Nova, Forge, Sentinel, Atlas, Pulse)
 
-### Phase 2: Rebranding & Mobile
-- Forge → ATOM
-- Blue/purple color scheme
-- Mobile responsive design
+### Phase 5: Subscription & Admin (December 2025)
+- Subscription plans with Stripe
+- Credit top-up packages
+- Usage tracking and logging
+- Admin dashboard API
 
-### Phase 3: IDE Features
-- Code Execution: Python & JavaScript run in sandbox
-- Auto-Fix Loop: AI fixes errors automatically (up to 5 attempts)
-- Multi-File Projects: Create projects with multiple files
-- File Tree: Visual file browser with icons
-- Monaco Editor: Full-featured code editor
-- Console Output: See execution results
-- Live Preview: HTML renders in iframe
-
-### Phase 4: Multi-Agent System (December 2025)
-- **Specialized Agents**: 
-  - Nova - Software architecture & coding
-  - Forge - Infrastructure & DevOps
-  - Sentinel - Security & authentication
-  - Atlas - Analytics & optimization
-  - Pulse - Marketing & growth
-- **Execution Modes**:
-  - E-1: Stable & thorough
-  - E-2: Thorough & relentless (Pro)
-  - Prototype: Experimental
-  - Mobile: Mobile-first focus
-- **Ultra Thinking Mode**: Deep multi-step reasoning
-- **Super Admin**: Antoniohoshaw6@gmail.com with unlimited access
-- **Credits System**: 10 credits for regular users, unlimited for super admin
-
-### Phase 5: Subscription & Admin System (December 2025)
-- **Subscription Plans**:
-  - Free: $0/month, 10 credits, limited features
-  - Pro: $29/month, 500 credits, all features
-  - Enterprise: $99/month, unlimited everything
-- **Usage Tracking**: All actions logged with timestamps, credits, metadata
-- **Admin Dashboard API**: User management, stats, credit control
-- **Role-Based Access Control**: Admin-only endpoints with 403 protection
+### Phase 6: Stripe Payment Integration (December 2025)
+- **Stripe Checkout Sessions** for subscriptions and credits
+- **Webhook handling** for payment confirmation
+- **Payment status polling** for redirect handling
+- **Payment history** tracking
+- **Mobile-optimized** subscription modal
+- **Safe area padding** for iOS devices
+- **Keyboard-aware** layout
 
 ## API Endpoints
+
+### Payment & Subscription
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | /api/subscription | Get subscription + credit packages | Required |
+| GET | /api/subscription/plans | List all plans | Public |
+| POST | /api/checkout/subscription | Create Stripe checkout for plan | Required |
+| POST | /api/checkout/credits | Create Stripe checkout for credits | Required |
+| GET | /api/checkout/status/{id} | Check payment status | Required |
+| GET | /api/payment/history | Get payment transactions | Required |
+| POST | /api/webhook/stripe | Stripe webhook handler | Webhook |
 
 ### Authentication
 | Method | Endpoint | Auth |
@@ -93,50 +111,19 @@ Build an AI coding app with ALL features like an AI assistant: code execution, a
 | GET | /api/user/preferences | Required |
 | PUT | /api/user/preferences | Required |
 
-### Subscription
-| Method | Endpoint | Auth |
-|--------|----------|------|
-| GET | /api/subscription/plans | Public |
-| GET | /api/subscription | Required |
-| POST | /api/subscription/upgrade | Required |
-
-### Agents
-| Method | Endpoint | Auth |
-|--------|----------|------|
-| GET | /api/agents | Public |
-
-### Chat
+### Chat & Code
 | Method | Endpoint | Auth |
 |--------|----------|------|
 | POST | /api/chat | Required |
-| GET | /api/conversations | Required |
-| GET | /api/conversations/{id} | Required |
-| DELETE | /api/conversations/{id} | Required |
-
-### Code Execution
-| Method | Endpoint | Auth |
-|--------|----------|------|
 | POST | /api/code/execute | Required |
 | POST | /api/code/autofix | Required |
 | POST | /api/code/autofix-loop | Required |
-
-### Projects
-| Method | Endpoint | Auth |
-|--------|----------|------|
-| POST | /api/projects | Required |
-| GET | /api/projects | Required |
-| GET | /api/projects/{id} | Required |
-| DELETE | /api/projects/{id} | Required |
-| POST | /api/projects/{id}/files | Required |
-| PUT | /api/projects/{id}/files/{name} | Required |
-| DELETE | /api/projects/{id}/files/{name} | Required |
 
 ### Media Generation
 | Method | Endpoint | Auth |
 |--------|----------|------|
 | POST | /api/video/generate | Required |
 | POST | /api/video/from-media | Required |
-| GET | /api/video/status/{id} | Required |
 | POST | /api/image/generate | Required |
 | POST | /api/clone/site | Required |
 
@@ -145,93 +132,37 @@ Build an AI coding app with ALL features like an AI assistant: code execution, a
 |--------|----------|------|
 | GET | /api/admin/stats | Admin |
 | GET | /api/admin/users | Admin |
-| GET | /api/admin/users/{id} | Admin |
 | PUT | /api/admin/users/{id} | Admin |
 | POST | /api/admin/users/{id}/credits | Admin |
 | DELETE | /api/admin/users/{id} | Admin |
 | GET | /api/admin/usage | Admin |
 
-## Database Schema
-
-### users
-```javascript
-{
-  "id": "uuid",
-  "email": "string",
-  "password": "bcrypt hash",
-  "name": "string",
-  "role": "user|premium|super_admin",
-  "credits": "number (-1 = unlimited)",
-  "is_super_admin": "boolean",
-  "subscription": {
-    "plan": "free|pro|enterprise",
-    "status": "active|canceled",
-    "current_period_start": "datetime",
-    "current_period_end": "datetime"
-  },
-  "usage": {
-    "chat_messages": "number",
-    "code_executions": "number",
-    "video_generations": "number",
-    "image_generations": "number",
-    "credits_used": "number"
-  },
-  "preferences": {
-    "default_agent": "nova|forge|sentinel|atlas|pulse",
-    "default_mode": "e1|e2|prototype|mobile",
-    "ultra_thinking": "boolean",
-    "theme": "dark|light"
-  }
-}
-```
-
-### usage_logs
-```javascript
-{
-  "id": "uuid",
-  "user_id": "string",
-  "action": "chat_message|code_execution|video_generation|image_generation",
-  "agent": "string",
-  "mode": "string",
-  "credits_used": "number",
-  "success": "boolean",
-  "metadata": "object",
-  "created_at": "datetime"
-}
-```
-
-## Credit Costs
-| Action | Cost |
-|--------|------|
-| Chat Message | 0.10 |
-| Ultra Thinking (extra) | 0.20 |
-| Code Execution | 0.05 |
-| Video Generation | 5.00 |
-| Image Generation | 0.50 |
-| Site Clone | 1.00 |
-
 ## Test Results
-- Backend: 100% (24/24 tests passed)
-- Frontend: 100% (all UI features verified)
+- Backend Stripe Tests: **24/24 passed** (100%)
+- All Stripe checkout endpoints working
+- Mobile UI verified
+- Super admin unlimited access confirmed
 
-## Super Admin Configuration
+## Super Admin
 - Email: Antoniohoshaw6@gmail.com
-- Privileges: Unlimited usage, all premium features, billing exempt, admin dashboard access
+- Privileges: Unlimited usage, all premium features, billing exempt
+- UI shows "UNLIMITED" badge instead of credits
 
 ## Architecture
 ```
 /app/
 ├── backend/
-│   ├── server.py          # Main FastAPI app
+│   ├── server.py          # FastAPI + Stripe integration
+│   ├── tests/
+│   │   └── test_stripe_checkout.py
 │   ├── requirements.txt
-│   └── .env
+│   └── .env (STRIPE_API_KEY)
 ├── frontend/
 │   ├── src/
-│   │   ├── App.js
-│   │   ├── lib/api.js     # API functions
 │   │   ├── pages/
-│   │   │   └── WorkspacePage.js
-│   │   └── components/ui/
+│   │   │   └── WorkspacePage.js (SubscriptionModal)
+│   │   ├── lib/api.js
+│   │   └── index.css (mobile safe areas)
 │   └── package.json
 └── memory/
     ├── PRD.md
@@ -240,12 +171,12 @@ Build an AI coding app with ALL features like an AI assistant: code execution, a
 
 ## Next Tasks (P1)
 1. Browser Extension Architecture
-2. Stripe Payment Integration
-3. Admin Dashboard UI
-4. Self-Debug Loop Enhancement
+2. Admin Dashboard UI
+3. Self-Debug Loop Enhancement
+4. Stripe recurring billing (auto-renewal)
 
 ## Future Tasks (P2)
-1. Multi-agent Orchestration
+1. Multi-agent Orchestration (Atom Core coordinator)
 2. Real-time Collaboration
 3. Git Integration
 4. Additional Language Support
