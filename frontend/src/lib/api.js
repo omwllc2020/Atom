@@ -176,8 +176,83 @@ export const getUserCredits = async () => {
   return response.data;
 };
 
+export const getUserUsage = async () => {
+  const response = await axios.get(`${API}/user/usage`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const getUserUsageHistory = async (limit = 50, action = null) => {
+  const params = new URLSearchParams({ limit });
+  if (action) params.append('action', action);
+  const response = await axios.get(`${API}/user/usage/history?${params}`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const getUserPreferences = async () => {
+  const response = await axios.get(`${API}/user/preferences`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const updateUserPreferences = async (preferences) => {
+  const response = await axios.put(`${API}/user/preferences`, preferences, { headers: getAuthHeader() });
+  return response.data;
+};
+
+// Subscription
+export const getSubscriptionPlans = async () => {
+  const response = await axios.get(`${API}/subscription/plans`);
+  return response.data;
+};
+
+export const getSubscription = async () => {
+  const response = await axios.get(`${API}/subscription`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const upgradeSubscription = async (planId) => {
+  const response = await axios.post(`${API}/subscription/upgrade?plan_id=${planId}`, {}, { headers: getAuthHeader() });
+  return response.data;
+};
+
+// Agents
 export const getAgents = async () => {
   const response = await axios.get(`${API}/agents`);
+  return response.data;
+};
+
+// Admin APIs
+export const getAdminStats = async () => {
+  const response = await axios.get(`${API}/admin/stats`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const getAdminUsers = async (skip = 0, limit = 50) => {
+  const response = await axios.get(`${API}/admin/users?skip=${skip}&limit=${limit}`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const getAdminUser = async (userId) => {
+  const response = await axios.get(`${API}/admin/users/${userId}`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const updateAdminUser = async (userId, updates) => {
+  const response = await axios.put(`${API}/admin/users/${userId}`, updates, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const addUserCredits = async (userId, amount) => {
+  const response = await axios.post(`${API}/admin/users/${userId}/credits?amount=${amount}`, {}, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const deleteAdminUser = async (userId) => {
+  const response = await axios.delete(`${API}/admin/users/${userId}`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const getAdminUsage = async (days = 30) => {
+  const response = await axios.get(`${API}/admin/usage?days=${days}`, { headers: getAuthHeader() });
   return response.data;
 };
 

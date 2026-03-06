@@ -208,8 +208,68 @@ MODE_CONFIGS = {
     }
 }
 
+# Subscription Plans
+SUBSCRIPTION_PLANS = {
+    "free": {
+        "name": "Free",
+        "price_monthly": 0,
+        "credits_monthly": 10,
+        "features": {
+            "chat_messages": 50,
+            "code_executions": 20,
+            "video_generations": 2,
+            "image_generations": 10,
+            "agents": ["nova"],
+            "modes": ["e1"],
+            "ultra_thinking": False,
+            "priority_support": False
+        }
+    },
+    "pro": {
+        "name": "Pro",
+        "price_monthly": 29,
+        "credits_monthly": 500,
+        "features": {
+            "chat_messages": 2000,
+            "code_executions": 500,
+            "video_generations": 20,
+            "image_generations": 100,
+            "agents": ["nova", "forge", "sentinel", "atlas", "pulse"],
+            "modes": ["e1", "e2", "prototype", "mobile"],
+            "ultra_thinking": True,
+            "priority_support": True
+        }
+    },
+    "enterprise": {
+        "name": "Enterprise",
+        "price_monthly": 99,
+        "credits_monthly": -1,
+        "features": {
+            "chat_messages": -1,
+            "code_executions": -1,
+            "video_generations": -1,
+            "image_generations": -1,
+            "agents": ["nova", "forge", "sentinel", "atlas", "pulse"],
+            "modes": ["e1", "e2", "prototype", "mobile"],
+            "ultra_thinking": True,
+            "priority_support": True,
+            "dedicated_support": True
+        }
+    }
+}
+
+# Credit Costs per action
+CREDIT_COSTS = {
+    "chat_message": 0.1,
+    "chat_ultra_thinking": 0.2,
+    "code_execution": 0.05,
+    "video_generation": 5.0,
+    "image_generation": 0.5,
+    "site_clone": 1.0
+}
+
 # Create the main app
-app = FastAPI()
+app = FastAPI(title="ATOM AI Platform", version="2.0.0")
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
@@ -251,11 +311,44 @@ class UserResponse(BaseModel):
     role: str = "user"
     credits: float = 10.0
     is_super_admin: bool = False
+    subscription: Optional[Dict[str, Any]] = None
+    usage: Optional[Dict[str, Any]] = None
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+# Subscription Models
+class SubscriptionPlan(BaseModel):
+    id: str
+    name: str
+    price_monthly: float
+    credits_monthly: int
+    features: Dict[str, Any]
+
+class UsageStats(BaseModel):
+    chat_messages: int = 0
+    code_executions: int = 0
+    video_generations: int = 0
+    image_generations: int = 0
+    credits_used: float = 0.0
+    period_start: str
+    period_end: str
+
+class UsageLogEntry(BaseModel):
+    action: str
+    agent: Optional[str] = None
+    mode: Optional[str] = None
+    credits_used: float
+    success: bool
+    created_at: str
+
+class UserPreferences(BaseModel):
+    default_agent: str = "nova"
+    default_mode: str = "e1"
+    ultra_thinking: bool = False
+    theme: str = "dark"
 
 class ChatMessage(BaseModel):
     role: str
@@ -411,6 +504,95 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+async def require_admin(current_user: dict = Depends(get_current_user)):
+    """Middleware to require super admin access"""
+    if not current_user.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
+
+# ==================== USAGE & CREDITS HELPERS ====================
+
+async def log_usage(user_id: str, action: str, agent: str = None, mode: str = None, 
+                    credits_used: float = 0, success: bool = True, metadata: dict = None):
+    """Log usage for tracking and analytics"""
+    log_entry = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "action": action,
+        "agent": agent,
+        "mode": mode,
+        "credits_used": credits_used,
+        "success": success,
+        "metadata": metadata or {},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.usage_logs.insert_one(log_entry)
+    
+    # Update user's usage counters
+    usage_field = f"usage.{action}s"
+    await db.users.update_one(
+        {"id": user_id},
+        {"$inc": {usage_field: 1, "usage.credits_used": credits_used}}
+    )
+
+async def check_and_deduct_credits(user: dict, action: str, extra_cost: float = 0) -> bool:
+    """Check if user has enough credits and deduct them"""
+    if user.get("is_super_admin"):
+        return True  # Super admin has unlimited
+    
+    base_cost = CREDIT_COSTS.get(action, 0)
+    total_cost = base_cost + extra_cost
+    
+    current_credits = user.get("credits", 0)
+    if current_credits < total_cost:
+        return False
+    
+    # Deduct credits
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$inc": {"credits": -total_cost}}
+    )
+    return True
+
+async def check_feature_access(user: dict, feature: str) -> bool:
+    """Check if user has access to a feature based on their plan"""
+    if user.get("is_super_admin"):
+        return True
+    
+    plan_id = user.get("subscription", {}).get("plan", "free")
+    plan = SUBSCRIPTION_PLANS.get(plan_id, SUBSCRIPTION_PLANS["free"])
+    
+    # Check specific feature access
+    if feature in ["agents", "modes"]:
+        return True  # All plans have some agents/modes
+    
+    return plan["features"].get(feature, False)
+
+async def check_usage_limit(user: dict, action: str) -> bool:
+    """Check if user is within usage limits for their plan"""
+    if user.get("is_super_admin"):
+        return True
+    
+    plan_id = user.get("subscription", {}).get("plan", "free")
+    plan = SUBSCRIPTION_PLANS.get(plan_id, SUBSCRIPTION_PLANS["free"])
+    
+    limit = plan["features"].get(action, 0)
+    if limit == -1:  # Unlimited
+        return True
+    
+    current_usage = user.get("usage", {}).get(action, 0)
+    return current_usage < limit
+
+def get_period_dates():
+    """Get current billing period start and end dates"""
+    now = datetime.now(timezone.utc)
+    period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    next_month = period_start.replace(month=period_start.month % 12 + 1)
+    if period_start.month == 12:
+        next_month = next_month.replace(year=period_start.year + 1)
+    period_end = next_month - timedelta(seconds=1)
+    return period_start.isoformat(), period_end.isoformat()
+
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register", response_model=TokenResponse)
@@ -421,6 +603,7 @@ async def register(user_data: UserCreate):
     
     user_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+    period_start, period_end = get_period_dates()
     
     # Determine role and credits based on email
     role = get_user_role(user_data.email)
@@ -435,7 +618,28 @@ async def register(user_data: UserCreate):
         "role": role,
         "credits": credits,
         "is_super_admin": is_admin,
-        "created_at": now
+        "subscription": {
+            "plan": "enterprise" if is_admin else "free",
+            "status": "active",
+            "current_period_start": period_start,
+            "current_period_end": period_end
+        },
+        "usage": {
+            "chat_messages": 0,
+            "code_executions": 0,
+            "video_generations": 0,
+            "image_generations": 0,
+            "credits_used": 0.0,
+            "last_reset": now
+        },
+        "preferences": {
+            "default_agent": "nova",
+            "default_mode": "e1",
+            "ultra_thinking": False,
+            "theme": "dark"
+        },
+        "created_at": now,
+        "updated_at": now
     }
     
     await db.users.insert_one(user_doc)
@@ -450,7 +654,9 @@ async def register(user_data: UserCreate):
             created_at=now,
             role=role,
             credits=credits,
-            is_super_admin=is_admin
+            is_super_admin=is_admin,
+            subscription=user_doc["subscription"],
+            usage=user_doc["usage"]
         )
     )
 
@@ -522,6 +728,293 @@ async def get_agents():
             }
             for mode_id, config in MODE_CONFIGS.items()
         ]
+    }
+
+# ==================== USER PROFILE & USAGE ====================
+
+@api_router.get("/user/usage")
+async def get_user_usage(current_user: dict = Depends(get_current_user)):
+    """Get user's usage statistics for current period"""
+    period_start, period_end = get_period_dates()
+    usage = current_user.get("usage", {})
+    plan_id = current_user.get("subscription", {}).get("plan", "free")
+    plan = SUBSCRIPTION_PLANS.get(plan_id, SUBSCRIPTION_PLANS["free"])
+    
+    return {
+        "usage": {
+            "chat_messages": usage.get("chat_messages", 0),
+            "code_executions": usage.get("code_executions", 0),
+            "video_generations": usage.get("video_generations", 0),
+            "image_generations": usage.get("image_generations", 0),
+            "credits_used": usage.get("credits_used", 0.0)
+        },
+        "limits": {
+            "chat_messages": plan["features"].get("chat_messages", 50),
+            "code_executions": plan["features"].get("code_executions", 20),
+            "video_generations": plan["features"].get("video_generations", 2),
+            "image_generations": plan["features"].get("image_generations", 10)
+        },
+        "period": {
+            "start": period_start,
+            "end": period_end
+        },
+        "plan": plan_id,
+        "is_unlimited": current_user.get("is_super_admin", False)
+    }
+
+@api_router.get("/user/usage/history")
+async def get_usage_history(
+    limit: int = 50,
+    action: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get user's usage history"""
+    query = {"user_id": current_user["id"]}
+    if action:
+        query["action"] = action
+    
+    logs = await db.usage_logs.find(
+        query,
+        {"_id": 0}
+    ).sort("created_at", -1).limit(limit).to_list(limit)
+    
+    return {"history": logs, "total": len(logs)}
+
+@api_router.get("/user/preferences")
+async def get_user_preferences(current_user: dict = Depends(get_current_user)):
+    """Get user's preferences"""
+    return current_user.get("preferences", {
+        "default_agent": "nova",
+        "default_mode": "e1",
+        "ultra_thinking": False,
+        "theme": "dark"
+    })
+
+@api_router.put("/user/preferences")
+async def update_user_preferences(
+    preferences: UserPreferences,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update user's preferences"""
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {
+            "preferences": preferences.dict(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    return {"status": "updated", "preferences": preferences.dict()}
+
+# ==================== SUBSCRIPTION MANAGEMENT ====================
+
+@api_router.get("/subscription/plans")
+async def get_subscription_plans():
+    """Get available subscription plans"""
+    return {
+        "plans": [
+            {
+                "id": plan_id,
+                "name": plan["name"],
+                "price_monthly": plan["price_monthly"],
+                "credits_monthly": plan["credits_monthly"],
+                "features": plan["features"]
+            }
+            for plan_id, plan in SUBSCRIPTION_PLANS.items()
+        ]
+    }
+
+@api_router.get("/subscription")
+async def get_subscription(current_user: dict = Depends(get_current_user)):
+    """Get user's current subscription"""
+    subscription = current_user.get("subscription", {
+        "plan": "free",
+        "status": "active"
+    })
+    plan_details = SUBSCRIPTION_PLANS.get(subscription.get("plan", "free"))
+    
+    return {
+        "subscription": subscription,
+        "plan_details": plan_details,
+        "is_super_admin": current_user.get("is_super_admin", False)
+    }
+
+@api_router.post("/subscription/upgrade")
+async def upgrade_subscription(
+    plan_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Upgrade user's subscription (simplified - no Stripe integration yet)"""
+    if plan_id not in SUBSCRIPTION_PLANS:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    
+    plan = SUBSCRIPTION_PLANS[plan_id]
+    period_start, period_end = get_period_dates()
+    
+    await db.users.update_one(
+        {"id": current_user["id"]},
+        {"$set": {
+            "subscription.plan": plan_id,
+            "subscription.status": "active",
+            "subscription.current_period_start": period_start,
+            "subscription.current_period_end": period_end,
+            "credits": plan["credits_monthly"],
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {
+        "status": "upgraded",
+        "plan": plan_id,
+        "credits": plan["credits_monthly"]
+    }
+
+# ==================== ADMIN ENDPOINTS ====================
+
+@api_router.get("/admin/stats")
+async def get_admin_stats(admin: dict = Depends(require_admin)):
+    """Get platform statistics (admin only)"""
+    total_users = await db.users.count_documents({})
+    active_users = await db.users.count_documents({"subscription.status": "active"})
+    premium_users = await db.users.count_documents({"subscription.plan": {"$in": ["pro", "enterprise"]}})
+    
+    total_conversations = await db.conversations.count_documents({})
+    total_projects = await db.projects.count_documents({})
+    total_videos = await db.video_generations.count_documents({})
+    total_images = await db.image_generations.count_documents({})
+    
+    return {
+        "users": {
+            "total": total_users,
+            "active": active_users,
+            "premium": premium_users,
+            "free": total_users - premium_users
+        },
+        "content": {
+            "conversations": total_conversations,
+            "projects": total_projects,
+            "videos": total_videos,
+            "images": total_images
+        }
+    }
+
+@api_router.get("/admin/users")
+async def get_all_users(
+    skip: int = 0,
+    limit: int = 50,
+    admin: dict = Depends(require_admin)
+):
+    """Get all users (admin only)"""
+    users = await db.users.find(
+        {},
+        {"_id": 0, "password": 0}
+    ).skip(skip).limit(limit).to_list(limit)
+    
+    total = await db.users.count_documents({})
+    
+    return {
+        "users": users,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
+
+@api_router.get("/admin/users/{user_id}")
+async def get_user_admin(user_id: str, admin: dict = Depends(require_admin)):
+    """Get user details (admin only)"""
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@api_router.put("/admin/users/{user_id}")
+async def update_user_admin(
+    user_id: str,
+    updates: Dict[str, Any],
+    admin: dict = Depends(require_admin)
+):
+    """Update user (admin only)"""
+    # Don't allow updating password or id directly
+    updates.pop("password", None)
+    updates.pop("id", None)
+    updates.pop("_id", None)
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.users.update_one(
+        {"id": user_id},
+        {"$set": updates}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"status": "updated", "user_id": user_id}
+
+@api_router.post("/admin/users/{user_id}/credits")
+async def add_user_credits(
+    user_id: str,
+    amount: float,
+    admin: dict = Depends(require_admin)
+):
+    """Add credits to user (admin only)"""
+    result = await db.users.update_one(
+        {"id": user_id},
+        {"$inc": {"credits": amount}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Log the credit addition
+    await log_usage(
+        user_id=user_id,
+        action="admin_credit_add",
+        credits_used=-amount,  # Negative because credits were added
+        metadata={"added_by": admin["id"], "amount": amount}
+    )
+    
+    return {"status": "credits_added", "amount": amount, "user_id": user_id}
+
+@api_router.delete("/admin/users/{user_id}")
+async def delete_user_admin(user_id: str, admin: dict = Depends(require_admin)):
+    """Delete user (admin only)"""
+    # Don't allow deleting super admin
+    user = await db.users.find_one({"id": user_id})
+    if user and is_super_admin(user.get("email", "")):
+        raise HTTPException(status_code=403, detail="Cannot delete super admin")
+    
+    result = await db.users.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Clean up user's data
+    await db.conversations.delete_many({"user_id": user_id})
+    await db.projects.delete_many({"user_id": user_id})
+    await db.usage_logs.delete_many({"user_id": user_id})
+    
+    return {"status": "deleted", "user_id": user_id}
+
+@api_router.get("/admin/usage")
+async def get_platform_usage(
+    days: int = 30,
+    admin: dict = Depends(require_admin)
+):
+    """Get platform usage statistics (admin only)"""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    
+    pipeline = [
+        {"$match": {"created_at": {"$gte": cutoff.isoformat()}}},
+        {"$group": {
+            "_id": "$action",
+            "count": {"$sum": 1},
+            "total_credits": {"$sum": "$credits_used"}
+        }}
+    ]
+    
+    results = await db.usage_logs.aggregate(pipeline).to_list(100)
+    
+    return {
+        "period_days": days,
+        "usage_by_action": {r["_id"]: {"count": r["count"], "credits": r["total_credits"]} for r in results}
     }
 
 # ==================== CODE EXECUTION ====================
@@ -618,6 +1111,10 @@ async def execute_code(request: CodeExecuteRequest, current_user: dict = Depends
     import time
     start_time = time.time()
     
+    # Check credits
+    if not await check_and_deduct_credits(current_user, "code_execution"):
+        raise HTTPException(status_code=402, detail="Insufficient credits for code execution")
+    
     language = request.language.lower()
     
     if language == 'python':
@@ -625,7 +1122,6 @@ async def execute_code(request: CodeExecuteRequest, current_user: dict = Depends
     elif language in ['javascript', 'js']:
         output, error, success = execute_javascript(request.code)
     elif language == 'html':
-        # HTML doesn't need execution, just return it for preview
         output = "HTML code ready for preview"
         error = None
         success = True
@@ -635,6 +1131,15 @@ async def execute_code(request: CodeExecuteRequest, current_user: dict = Depends
         success = False
     
     execution_time = time.time() - start_time
+    
+    # Log usage
+    await log_usage(
+        user_id=current_user["id"],
+        action="code_execution",
+        credits_used=CREDIT_COSTS["code_execution"],
+        success=success,
+        metadata={"language": language, "execution_time": execution_time}
+    )
     
     return CodeExecuteResponse(
         output=output,
@@ -1020,11 +1525,26 @@ async def chat_with_ai(request: ChatRequest, current_user: dict = Depends(get_cu
     )
     
     # Deduct credits for non-super-admin users
+    credits_used = CREDIT_COSTS["chat_message"]
+    if request.ultra_thinking:
+        credits_used += CREDIT_COSTS["chat_ultra_thinking"]
+    
     if not current_user.get("is_super_admin", False):
         await db.users.update_one(
             {"id": current_user["id"]},
-            {"$inc": {"credits": -0.1}}  # Deduct 0.1 credits per message
+            {"$inc": {"credits": -credits_used}}
         )
+    
+    # Log usage
+    await log_usage(
+        user_id=current_user["id"],
+        action="chat_message",
+        agent=request.agent,
+        mode=request.mode,
+        credits_used=credits_used,
+        success=True,
+        metadata={"ultra_thinking": request.ultra_thinking, "conversation_id": conversation_id}
+    )
     
     return ChatResponse(
         response=response,
