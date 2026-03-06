@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, BackgroundTasks, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
@@ -47,6 +47,10 @@ security = HTTPBearer()
 # Media storage directory
 MEDIA_DIR = ROOT_DIR / "media"
 MEDIA_DIR.mkdir(exist_ok=True)
+
+# Uploads directory for user files
+UPLOADS_DIR = ROOT_DIR / "uploads"
+UPLOADS_DIR.mkdir(exist_ok=True)
 
 # Projects directory
 PROJECTS_DIR = ROOT_DIR / "projects"
@@ -855,6 +859,135 @@ async def get_user_videos(current_user: dict = Depends(get_current_user)):
         if video.get("status") == "completed":
             video["video_url"] = f"/api/media/video/{video['id']}"
     return videos
+
+# ==================== IMAGE/VIDEO TO VIDEO (SORA 2) ====================
+
+async def generate_video_from_media_task(video_id: str, prompt: str, media_path: str, media_type: str, size: str, duration: int, user_id: str):
+    """Background task for generating video from uploaded image/video"""
+    from emergentintegrations.llm.openai.video_generation import OpenAIVideoGeneration
+    
+    try:
+        video_gen = OpenAIVideoGeneration(api_key=EMERGENT_LLM_KEY)
+        output_path = MEDIA_DIR / f"{video_id}.mp4"
+        
+        if media_type == "image":
+            # Image to video
+            video_bytes = video_gen.image_to_video(
+                prompt=prompt,
+                image_path=media_path,
+                model="sora-2",
+                size=size,
+                duration=duration,
+                max_wait_time=600
+            )
+        else:
+            # Video to video (extend/remix)
+            video_bytes = video_gen.video_to_video(
+                prompt=prompt,
+                video_path=media_path,
+                model="sora-2",
+                size=size,
+                duration=duration,
+                max_wait_time=600
+            )
+        
+        if video_bytes:
+            video_gen.save_video(video_bytes, str(output_path))
+            video_generation_status[video_id] = {
+                "status": "completed",
+                "video_url": f"/api/media/video/{video_id}"
+            }
+            await db.video_generations.update_one(
+                {"id": video_id},
+                {"$set": {"status": "completed", "video_path": str(output_path)}}
+            )
+        else:
+            video_generation_status[video_id] = {"status": "failed", "error": "Video generation failed"}
+            await db.video_generations.update_one({"id": video_id}, {"$set": {"status": "failed"}})
+    except Exception as e:
+        logger.error(f"Video from media generation error: {e}")
+        video_generation_status[video_id] = {"status": "failed", "error": str(e)}
+        await db.video_generations.update_one({"id": video_id}, {"$set": {"status": "failed", "error": str(e)}})
+
+@api_router.post("/video/from-media")
+async def generate_video_from_media(
+    background_tasks: BackgroundTasks,
+    prompt: str = Form(...),
+    size: str = Form("1280x720"),
+    duration: int = Form(4),
+    media: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate video from uploaded image or video"""
+    video_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Validate parameters
+    valid_sizes = ["1280x720", "1792x1024", "1024x1792", "1024x1024"]
+    valid_durations = [4, 8, 12]
+    
+    if size not in valid_sizes:
+        raise HTTPException(status_code=400, detail=f"Invalid size. Must be one of: {valid_sizes}")
+    if duration not in valid_durations:
+        raise HTTPException(status_code=400, detail=f"Invalid duration. Must be one of: {valid_durations}")
+    
+    # Determine media type
+    content_type = media.content_type or ""
+    filename = media.filename or ""
+    ext = filename.split(".")[-1].lower() if "." in filename else ""
+    
+    if content_type.startswith("image/") or ext in ["jpg", "jpeg", "png", "webp", "gif"]:
+        media_type = "image"
+        save_ext = ext if ext else "png"
+    elif content_type.startswith("video/") or ext in ["mp4", "mov", "avi", "webm"]:
+        media_type = "video"
+        save_ext = ext if ext else "mp4"
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Upload an image (jpg, png, webp) or video (mp4, mov)")
+    
+    # Save uploaded file
+    media_path = UPLOADS_DIR / f"{video_id}_source.{save_ext}"
+    async with aiofiles.open(media_path, 'wb') as f:
+        content = await media.read()
+        await f.write(content)
+    
+    # Store in DB
+    await db.video_generations.insert_one({
+        "id": video_id,
+        "user_id": current_user["id"],
+        "prompt": prompt,
+        "size": size,
+        "duration": duration,
+        "source_type": media_type,
+        "source_path": str(media_path),
+        "status": "processing",
+        "created_at": now
+    })
+    
+    video_generation_status[video_id] = {"status": "processing"}
+    
+    # Start background task
+    background_tasks.add_task(
+        generate_video_from_media_task, 
+        video_id, prompt, str(media_path), media_type, size, duration, current_user["id"]
+    )
+    
+    return {
+        "video_id": video_id,
+        "status": "processing",
+        "source_type": media_type,
+        "message": f"Generating video from {media_type}. This may take a few minutes."
+    }
+
+@api_router.get("/uploads/{file_id}")
+async def get_upload(file_id: str):
+    """Serve uploaded files"""
+    for ext in ["png", "jpg", "jpeg", "webp", "gif", "mp4", "mov", "avi", "webm"]:
+        file_path = UPLOADS_DIR / f"{file_id}.{ext}"
+        if file_path.exists():
+            media_type = "image/" + ext if ext in ["png", "jpg", "jpeg", "webp", "gif"] else "video/" + ext
+            return FileResponse(file_path, media_type=media_type)
+    raise HTTPException(status_code=404, detail="File not found")
 
 # ==================== IMAGE GENERATION (NANO BANANA) ====================
 

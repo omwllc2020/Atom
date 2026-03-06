@@ -44,7 +44,10 @@ import {
   AlertCircle,
   Eye,
   Settings,
-  Zap
+  Zap,
+  Upload,
+  Image as ImageLucide,
+  Film
 } from 'lucide-react';
 import {
   sendChatMessage,
@@ -52,6 +55,7 @@ import {
   getConversation,
   deleteConversation,
   generateVideo,
+  generateVideoFromMedia,
   getVideoStatus,
   generateImage,
   cloneSite,
@@ -751,74 +755,264 @@ const ChatPanel = ({ conversationId, setConversationId, onRefresh }) => {
   );
 };
 
-// Video Panel
+// Video Panel with Upload Support
 const VideoPanel = () => {
+  const [mode, setMode] = useState('text'); // 'text' or 'upload'
   const [prompt, setPrompt] = useState('');
   const [size, setSize] = useState('1280x720');
   const [duration, setDuration] = useState('4');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [uploadPreview, setUploadPreview] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      
+      if (!isImage && !isVideo) {
+        toast.error('Please upload an image or video file');
+        return;
+      }
+      
+      setUploadedFile(file);
+      
+      // Create preview
+      if (isImage) {
+        const reader = new FileReader();
+        reader.onload = (e) => setUploadPreview({ type: 'image', url: e.target.result });
+        reader.readAsDataURL(file);
+      } else {
+        setUploadPreview({ type: 'video', url: URL.createObjectURL(file) });
+      }
+    }
+  };
+
+  const clearUpload = () => {
+    setUploadedFile(null);
+    setUploadPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) { toast.error('Enter a prompt'); return; }
-    setLoading(true); setVideoUrl(null); setStatus('processing');
+    if (!prompt.trim()) { 
+      toast.error('Enter a prompt'); 
+      return; 
+    }
+    
+    if (mode === 'upload' && !uploadedFile) {
+      toast.error('Please upload an image or video first');
+      return;
+    }
+
+    setLoading(true); 
+    setVideoUrl(null); 
+    setStatus('processing');
 
     try {
-      const response = await generateVideo(prompt, size, parseInt(duration));
+      let response;
+      
+      if (mode === 'upload' && uploadedFile) {
+        // Generate from uploaded media
+        response = await generateVideoFromMedia(prompt, uploadedFile, size, parseInt(duration));
+      } else {
+        // Text to video
+        response = await generateVideo(prompt, size, parseInt(duration));
+      }
+      
       const interval = setInterval(async () => {
-        const status = await getVideoStatus(response.video_id);
-        setStatus(status.status);
-        if (status.status === 'completed') {
-          clearInterval(interval);
-          setVideoUrl(`${BACKEND_URL}${status.video_url}`);
-          setLoading(false);
-          toast.success('Video ready!');
-        } else if (status.status === 'failed') {
-          clearInterval(interval);
-          setLoading(false);
-          toast.error('Failed');
+        try {
+          const statusRes = await getVideoStatus(response.video_id);
+          setStatus(statusRes.status);
+          if (statusRes.status === 'completed') {
+            clearInterval(interval);
+            setVideoUrl(`${BACKEND_URL}${statusRes.video_url}`);
+            setLoading(false);
+            toast.success('Video ready!');
+          } else if (statusRes.status === 'failed') {
+            clearInterval(interval);
+            setLoading(false);
+            toast.error('Generation failed');
+          }
+        } catch (e) {
+          console.error('Status check error:', e);
         }
       }, 5000);
+      
       setTimeout(() => clearInterval(interval), 900000);
     } catch (error) {
-      toast.error('Failed'); setLoading(false); setStatus(null);
+      toast.error(error.response?.data?.detail || 'Failed'); 
+      setLoading(false); 
+      setStatus(null);
     }
   };
 
   return (
     <div className="flex flex-col h-full">
-      <div className="h-14 px-4 flex items-center border-b border-white/10">
-        <Video className="w-5 h-5 text-blue-400 mr-2" />
-        <span className="font-semibold">Video Generation</span>
+      <div className="h-14 px-4 flex items-center justify-between border-b border-white/10">
+        <div className="flex items-center">
+          <Video className="w-5 h-5 text-blue-400 mr-2" />
+          <span className="font-semibold">Video Generation</span>
+          <span className="ml-2 text-xs text-muted-foreground">(Sora 2)</span>
+        </div>
       </div>
+      
       <div className="flex-1 p-4 md:p-6 overflow-auto pb-20 md:pb-6">
         <div className="max-w-xl mx-auto space-y-4">
-          <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe your video..." className="h-28 bg-secondary/50 border-white/10 rounded-lg" />
+          {/* Mode Toggle */}
+          <div className="flex gap-2 p-1 bg-secondary/30 rounded-lg">
+            <button
+              onClick={() => setMode('text')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                mode === 'text' 
+                  ? 'bg-blue-500 text-white' 
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Wand2 className="w-4 h-4" />
+              Text to Video
+            </button>
+            <button
+              onClick={() => setMode('upload')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                mode === 'upload' 
+                  ? 'bg-blue-500 text-white' 
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              From Photo/Video
+            </button>
+          </div>
+
+          {/* Upload Section */}
+          {mode === 'upload' && (
+            <div className="space-y-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              
+              {!uploadedFile ? (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-32 border-2 border-dashed border-white/20 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-blue-500/50 hover:bg-blue-500/5 transition-colors group"
+                >
+                  <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                    <Plus className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <span className="text-sm text-muted-foreground">Click to upload image or video</span>
+                  <span className="text-xs text-muted-foreground/60">JPG, PNG, WebP, MP4, MOV</span>
+                </button>
+              ) : (
+                <div className="relative rounded-xl overflow-hidden bg-secondary/30 border border-white/10">
+                  {uploadPreview?.type === 'image' ? (
+                    <img src={uploadPreview.url} alt="Upload preview" className="w-full h-40 object-cover" />
+                  ) : (
+                    <video src={uploadPreview?.url} className="w-full h-40 object-cover" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {uploadPreview?.type === 'image' ? (
+                        <ImageLucide className="w-4 h-4 text-blue-400" />
+                      ) : (
+                        <Film className="w-4 h-4 text-purple-400" />
+                      )}
+                      <span className="text-sm text-white truncate">{uploadedFile.name}</span>
+                    </div>
+                    <button
+                      onClick={clearUpload}
+                      className="p-1.5 bg-black/40 rounded-full hover:bg-red-500/80 transition-colors"
+                    >
+                      <X className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Prompt */}
+          <Textarea 
+            value={prompt} 
+            onChange={(e) => setPrompt(e.target.value)} 
+            placeholder={mode === 'upload' 
+              ? "Describe how to animate/transform your upload..." 
+              : "Describe your video..."
+            }
+            className="h-24 bg-secondary/50 border-white/10 rounded-lg" 
+          />
+          
+          {/* Settings */}
           <div className="grid grid-cols-2 gap-3">
             <Select value={size} onValueChange={setSize}>
               <SelectTrigger className="bg-secondary/50 border-white/10 h-11"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="1280x720">HD</SelectItem>
-                <SelectItem value="1792x1024">Wide</SelectItem>
-                <SelectItem value="1024x1792">Portrait</SelectItem>
-                <SelectItem value="1024x1024">Square</SelectItem>
+                <SelectItem value="1280x720">HD (1280x720)</SelectItem>
+                <SelectItem value="1792x1024">Wide (1792x1024)</SelectItem>
+                <SelectItem value="1024x1792">Portrait (1024x1792)</SelectItem>
+                <SelectItem value="1024x1024">Square (1024x1024)</SelectItem>
               </SelectContent>
             </Select>
             <Select value={duration} onValueChange={setDuration}>
               <SelectTrigger className="bg-secondary/50 border-white/10 h-11"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="4">4 sec</SelectItem>
-                <SelectItem value="8">8 sec</SelectItem>
-                <SelectItem value="12">12 sec</SelectItem>
+                <SelectItem value="4">4 seconds</SelectItem>
+                <SelectItem value="8">8 seconds</SelectItem>
+                <SelectItem value="12">12 seconds</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={handleGenerate} disabled={loading} className="w-full h-12 btn-gradient font-semibold rounded-lg">
-            {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</> : <><Play className="w-4 h-4 mr-2" />Generate</>}
+          
+          {/* Generate Button */}
+          <Button 
+            onClick={handleGenerate} 
+            disabled={loading || (mode === 'upload' && !uploadedFile)} 
+            className="w-full h-12 btn-gradient font-semibold rounded-lg"
+          >
+            {loading ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating...</>
+            ) : (
+              <><Play className="w-4 h-4 mr-2" />Generate Video</>
+            )}
           </Button>
-          {status && <div className="p-4 bg-secondary/30 border border-white/10 rounded-xl"><div className="flex items-center gap-2"><div className={`status-dot ${status}`} /><span className="text-sm capitalize">{status}</span></div></div>}
-          {videoUrl && <div className="video-container rounded-xl"><video src={videoUrl} controls className="w-full" /></div>}
+          
+          {/* Status */}
+          {status && (
+            <div className="p-4 bg-secondary/30 border border-white/10 rounded-xl">
+              <div className="flex items-center gap-2">
+                <div className={`status-dot ${status}`} />
+                <span className="text-sm font-medium capitalize">{status}</span>
+              </div>
+              {status === 'processing' && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  This may take 2-10 minutes. You can leave this page and check back later.
+                </p>
+              )}
+            </div>
+          )}
+          
+          {/* Result */}
+          {videoUrl && (
+            <div className="video-container rounded-xl">
+              <video src={videoUrl} controls className="w-full" />
+              <div className="p-3 border-t border-white/10 flex justify-end">
+                <a href={videoUrl} download className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                  <Download className="w-3 h-3" />
+                  Download
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

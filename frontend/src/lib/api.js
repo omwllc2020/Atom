@@ -118,6 +118,23 @@ export const generateVideo = async (prompt, size = "1280x720", duration = 4) => 
   return response.data;
 };
 
+// Video from Image/Video Upload
+export const generateVideoFromMedia = async (prompt, mediaFile, size = "1280x720", duration = 4) => {
+  const formData = new FormData();
+  formData.append('prompt', prompt);
+  formData.append('size', size);
+  formData.append('duration', duration.toString());
+  formData.append('media', mediaFile);
+  
+  const response = await axios.post(`${API}/video/from-media`, formData, {
+    headers: {
+      ...getAuthHeader(),
+      'Content-Type': 'multipart/form-data'
+    }
+  });
+  return response.data;
+};
+
 export const getVideoStatus = async (videoId) => {
   const response = await axios.get(`${API}/video/status/${videoId}`, { headers: getAuthHeader() });
   return response.data;
