@@ -507,11 +507,9 @@ async def clone_site(request: SiteCloneRequest, current_user: dict = Depends(get
     now = datetime.now(timezone.utc).isoformat()
     
     try:
-        # Take screenshot of the URL using httpx and a screenshot service
-        # For MVP, we'll use a simple approach
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # Fetch the page HTML
-            response = await client.get(request.url, follow_redirects=True)
+        # Fetch the page HTML with SSL verification disabled for broader compatibility
+        async with httpx.AsyncClient(timeout=30.0, verify=False, follow_redirects=True) as client:
+            response = await client.get(request.url)
             page_html = response.text[:5000]  # Limit to first 5000 chars
         
         # Use AI to generate code based on description
