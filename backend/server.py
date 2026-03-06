@@ -862,27 +862,155 @@ async def get_user_videos(current_user: dict = Depends(get_current_user)):
 
 # ==================== IMAGE/VIDEO TO VIDEO (SORA 2) ====================
 
+async def resize_image_to_match_video(image_path: str, size: str) -> str:
+    """Resize image to match video dimensions"""
+    from PIL import Image
+    
+    width, height = map(int, size.split('x'))
+    
+    with Image.open(image_path) as img:
+        # Convert to RGB if necessary
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
+        
+        # Resize to exact dimensions
+        img_resized = img.resize((width, height), Image.Resampling.LANCZOS)
+        
+        # Save as JPEG (better compatibility)
+        resized_path = image_path.rsplit('.', 1)[0] + '_resized.jpg'
+        img_resized.save(resized_path, 'JPEG', quality=95)
+        
+        return resized_path
+
+async def generate_video_from_image_direct(video_id: str, prompt: str, image_path: str, size: str, duration: int) -> bool:
+    """Generate video from image using direct API call"""
+    import time
+    
+    try:
+        # Resize image to match video dimensions
+        resized_path = await resize_image_to_match_video(image_path, size)
+        logger.info(f"Resized image saved to: {resized_path}")
+        
+        # Read image data
+        with open(resized_path, 'rb') as f:
+            image_data = f.read()
+        
+        # Make direct API call to emergent integrations
+        async with httpx.AsyncClient(timeout=600.0) as client:
+            # Step 1: Initiate video generation
+            files = {
+                'input_reference': ('image.jpg', image_data, 'image/jpeg')
+            }
+            data = {
+                'prompt': prompt,
+                'model': 'sora-2',
+                'size': size,
+                'seconds': str(duration)  # API uses 'seconds' not 'duration'
+            }
+            headers = {
+                'Authorization': f'Bearer {EMERGENT_LLM_KEY}'
+            }
+            
+            response = await client.post(
+                'https://integrations.emergentagent.com/llm/openai/v1/videos',
+                files=files,
+                data=data,
+                headers=headers
+            )
+            
+            if response.status_code != 200 and response.status_code != 202:
+                logger.error(f"Video initiation failed: {response.status_code} - {response.text}")
+                return False
+            
+            result = response.json()
+            task_id = result.get('id') or result.get('task_id')
+            
+            if not task_id:
+                logger.error(f"No task ID in response: {result}")
+                return False
+            
+            logger.info(f"Video generation started with task ID: {task_id}")
+            
+            # Step 2: Poll for completion
+            max_wait = 600  # 10 minutes
+            poll_interval = 10
+            elapsed = 0
+            
+            while elapsed < max_wait:
+                await asyncio.sleep(poll_interval)
+                elapsed += poll_interval
+                
+                status_response = await client.get(
+                    f'https://integrations.emergentagent.com/llm/openai/v1/videos/{task_id}',
+                    headers=headers
+                )
+                
+                if status_response.status_code != 200:
+                    continue
+                
+                status_data = status_response.json()
+                status = status_data.get('status', '')
+                
+                logger.info(f"Video status: {status}")
+                
+                if status == 'completed' or status == 'succeeded':
+                    # Get video content via separate endpoint
+                    video_content_response = await client.get(
+                        f'https://integrations.emergentagent.com/llm/openai/v1/videos/{task_id}/content',
+                        headers=headers
+                    )
+                    
+                    if video_content_response.status_code == 200:
+                        output_path = MEDIA_DIR / f"{video_id}.mp4"
+                        async with aiofiles.open(output_path, 'wb') as f:
+                            await f.write(video_content_response.content)
+                        logger.info(f"Video saved to {output_path}")
+                        return True
+                    else:
+                        logger.error(f"Failed to download video: {video_content_response.status_code}")
+                        return False
+                
+                elif status == 'failed' or status == 'error':
+                    logger.error(f"Video generation failed: {status_data}")
+                    return False
+            
+            logger.error("Video generation timed out")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Direct video generation error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 async def generate_video_from_media_task(video_id: str, prompt: str, media_path: str, media_type: str, size: str, duration: int, user_id: str):
     """Background task for generating video from uploaded image/video"""
     from emergentintegrations.llm.openai.video_generation import OpenAIVideoGeneration
     
     try:
-        video_gen = OpenAIVideoGeneration(api_key=EMERGENT_LLM_KEY)
         output_path = MEDIA_DIR / f"{video_id}.mp4"
         
-        # Determine mime type for images
-        ext = media_path.split('.')[-1].lower()
-        mime_map = {
-            'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg', 
-            'png': 'image/png',
-            'webp': 'image/webp',
-            'gif': 'image/gif'
-        }
-        mime_type = mime_map.get(ext, 'image/jpeg')
-        
         if media_type == "image":
-            # Image to video using text_to_video with image_path parameter
+            # Try direct API call first (workaround for library bug)
+            success = await generate_video_from_image_direct(video_id, prompt, media_path, size, duration)
+            
+            if success:
+                video_generation_status[video_id] = {
+                    "status": "completed",
+                    "video_url": f"/api/media/video/{video_id}"
+                }
+                await db.video_generations.update_one(
+                    {"id": video_id},
+                    {"$set": {"status": "completed", "video_path": str(output_path)}}
+                )
+                return
+            
+            # Fallback to library method (may not work)
+            video_gen = OpenAIVideoGeneration(api_key=EMERGENT_LLM_KEY)
+            ext = media_path.split('.')[-1].lower()
+            mime_map = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp'}
+            mime_type = mime_map.get(ext, 'image/jpeg')
+            
             video_bytes = video_gen.text_to_video(
                 prompt=prompt,
                 image_path=media_path,
@@ -892,30 +1020,45 @@ async def generate_video_from_media_task(video_id: str, prompt: str, media_path:
                 duration=duration,
                 max_wait_time=600
             )
+            
+            if video_bytes:
+                video_gen.save_video(video_bytes, str(output_path))
+                video_generation_status[video_id] = {
+                    "status": "completed",
+                    "video_url": f"/api/media/video/{video_id}"
+                }
+                await db.video_generations.update_one(
+                    {"id": video_id},
+                    {"$set": {"status": "completed", "video_path": str(output_path)}}
+                )
+                return
         else:
-            # For video input, we need to extract a frame and use that
-            # Or just use text_to_video with the prompt
+            # For video input, just use text-to-video with enhanced prompt
+            video_gen = OpenAIVideoGeneration(api_key=EMERGENT_LLM_KEY)
             video_bytes = video_gen.text_to_video(
-                prompt=f"Based on the style and content of the reference: {prompt}",
+                prompt=f"Based on the style: {prompt}",
                 model="sora-2",
                 size=size,
                 duration=duration,
                 max_wait_time=600
             )
+            
+            if video_bytes:
+                video_gen.save_video(video_bytes, str(output_path))
+                video_generation_status[video_id] = {
+                    "status": "completed",
+                    "video_url": f"/api/media/video/{video_id}"
+                }
+                await db.video_generations.update_one(
+                    {"id": video_id},
+                    {"$set": {"status": "completed", "video_path": str(output_path)}}
+                )
+                return
         
-        if video_bytes:
-            video_gen.save_video(video_bytes, str(output_path))
-            video_generation_status[video_id] = {
-                "status": "completed",
-                "video_url": f"/api/media/video/{video_id}"
-            }
-            await db.video_generations.update_one(
-                {"id": video_id},
-                {"$set": {"status": "completed", "video_path": str(output_path)}}
-            )
-        else:
-            video_generation_status[video_id] = {"status": "failed", "error": "Video generation failed"}
-            await db.video_generations.update_one({"id": video_id}, {"$set": {"status": "failed"}})
+        # If we got here, generation failed
+        video_generation_status[video_id] = {"status": "failed", "error": "Video generation failed"}
+        await db.video_generations.update_one({"id": video_id}, {"$set": {"status": "failed"}})
+        
     except Exception as e:
         logger.error(f"Video from media generation error: {e}")
         video_generation_status[video_id] = {"status": "failed", "error": str(e)}
