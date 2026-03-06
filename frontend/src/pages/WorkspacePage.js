@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -58,7 +58,9 @@ import {
   Brain,
   ChevronDown,
   Coins,
-  User
+  User,
+  CreditCard,
+  Bell
 } from 'lucide-react';
 import {
   sendChatMessage,
@@ -81,8 +83,28 @@ import {
   updateFile,
   deleteFile,
   getUserCredits,
+  getSubscription,
+  createSubscriptionCheckout,
+  createCreditsCheckout,
+  getCheckoutStatus,
   BACKEND_URL
 } from '../lib/api';
+
+// Subscription Plans
+const PLANS = [
+  { id: 'free', name: 'Free', price: 0, credits: 10, popular: false },
+  { id: 'core', name: 'Core', price: 20, credits: 25, popular: true },
+  { id: 'pro', name: 'Pro', price: 40, credits: 50, popular: false },
+  { id: 'enterprise', name: 'Enterprise', price: 99, credits: -1, popular: false }
+];
+
+// Credit Packages
+const CREDIT_PACKAGES = [
+  { id: 'small', name: 'Small', credits: 10, price: 5 },
+  { id: 'medium', name: 'Medium', credits: 25, price: 10 },
+  { id: 'large', name: 'Large', credits: 50, price: 18 },
+  { id: 'xlarge', name: 'XL', credits: 100, price: 30 }
+];
 
 // Agent definitions
 const AGENTS = [
@@ -285,19 +307,19 @@ const AgentSelector = ({ isOpen, onClose, selectedMode, onSelectMode, selectedAg
 };
 
 // Top Header with Welcome, Credits, and Agent Selection
-const WorkspaceHeader = ({ user, credits, isSuperAdmin, selectedMode, selectedAgent, onOpenAgentSelector }) => {
+const WorkspaceHeader = ({ user, credits, isSuperAdmin, selectedMode, selectedAgent, onOpenAgentSelector, onOpenSubscription }) => {
   const currentMode = MODES.find(m => m.id === selectedMode);
   const currentAgent = AGENTS.find(a => a.id === selectedAgent);
   
   return (
-    <div className="h-12 px-4 flex items-center justify-between border-b border-white/10 bg-[#050505]">
+    <div className="h-12 px-2 sm:px-4 flex items-center justify-between border-b border-white/10 bg-[#050505] shrink-0">
       {/* Welcome Message */}
-      <div className="flex items-center gap-3">
-        <span className="text-xs tracking-[0.3em] text-cyan-400/80 font-light">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <span className="text-[10px] sm:text-xs tracking-[0.2em] sm:tracking-[0.3em] text-cyan-400/80 font-light truncate">
           WELCOME, <span className="text-cyan-400">{user?.name?.toUpperCase() || 'USER'}</span>
         </span>
         {isSuperAdmin && (
-          <span className="px-2 py-0.5 text-[10px] font-bold bg-gradient-to-r from-yellow-500 to-orange-500 text-black rounded-full flex items-center gap-1">
+          <span className="hidden sm:flex px-2 py-0.5 text-[10px] font-bold bg-gradient-to-r from-yellow-500 to-orange-500 text-black rounded-full items-center gap-1 shrink-0">
             <Crown className="w-3 h-3" />
             SUPER ADMIN
           </span>
@@ -305,53 +327,44 @@ const WorkspaceHeader = ({ user, credits, isSuperAdmin, selectedMode, selectedAg
       </div>
 
       {/* Right Side */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Agent/Mode Selector Button */}
         <button
           onClick={onOpenAgentSelector}
-          className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors"
+          className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors"
         >
           <div className={`w-5 h-5 rounded bg-gradient-to-br ${currentAgent?.color || 'from-blue-500 to-cyan-500'} flex items-center justify-center`}>
             {currentAgent ? <currentAgent.icon className="w-3 h-3 text-white" /> : <Bot className="w-3 h-3 text-white" />}
           </div>
-          <span className="text-sm font-medium">{currentMode?.name || 'E-1'}</span>
+          <span className="text-sm font-medium hidden sm:inline">{currentMode?.name || 'E-1'}</span>
           <ChevronDown className="w-4 h-4 text-gray-400" />
         </button>
 
-        {/* Credits Display - Hidden for Super Admin */}
+        {/* Credits Display - Clickable for non-admin */}
         {!isSuperAdmin && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-full">
+          <button
+            onClick={onOpenSubscription}
+            className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-full hover:from-yellow-500/30 hover:to-orange-500/30 transition-all"
+          >
             <Coins className="w-4 h-4 text-yellow-500" />
-            <span className="text-sm font-semibold text-yellow-400">{credits?.toFixed(2) || '0.00'}</span>
-          </div>
+            <span className="text-sm font-semibold text-yellow-400">${credits?.toFixed(2) || '0.00'}</span>
+            <Plus className="w-3 h-3 text-yellow-500 hidden sm:block" />
+          </button>
         )}
 
         {/* Unlimited badge for Super Admin */}
         {isSuperAdmin && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/30 rounded-full">
+          <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/30 rounded-full">
             <Zap className="w-4 h-4 text-purple-400" />
-            <span className="text-sm font-semibold text-purple-400">UNLIMITED</span>
+            <span className="text-sm font-semibold text-purple-400 hidden sm:inline">UNLIMITED</span>
           </div>
         )}
-
-        {/* Notifications */}
-        <button className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-          <Bell className="w-5 h-5 text-gray-400" />
-        </button>
       </div>
     </div>
   );
 };
 
-// Bell icon component (since lucide-react might not have it imported)
-const Bell = ({ className }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </svg>
-);
-
-// Mobile Bottom Nav
+// Mobile Bottom Nav - with safe area padding
 const MobileNav = ({ activeTab, setActiveTab }) => {
   const tabs = [
     { id: 'chat', icon: MessageSquare, label: 'Chat' },
@@ -362,7 +375,7 @@ const MobileNav = ({ activeTab, setActiveTab }) => {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-16 bg-card border-t border-white/10 flex items-center justify-around px-2 md:hidden z-50">
+    <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-white/10 flex items-center justify-around px-2 md:hidden z-40 pb-safe" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)', height: 'calc(64px + env(safe-area-inset-bottom, 0px))' }}>
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -1427,10 +1440,163 @@ const HistoryPanel = ({ conversations, onSelect, onDelete, onRefresh }) => (
   </div>
 );
 
+// Subscription Modal
+const SubscriptionModal = ({ isOpen, onClose, currentPlan, credits, onPurchase }) => {
+  const [loading, setLoading] = useState(null);
+  const [activeTab, setActiveTab] = useState('plans');
+
+  if (!isOpen) return null;
+
+  const handleSubscribe = async (planId) => {
+    if (planId === 'free') return;
+    setLoading(planId);
+    try {
+      const result = await createSubscriptionCheckout(planId);
+      if (result.checkout_url) {
+        window.location.href = result.checkout_url;
+      }
+    } catch (error) {
+      toast.error('Failed to start checkout');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleBuyCredits = async (packageId) => {
+    setLoading(packageId);
+    try {
+      const result = await createCreditsCheckout(packageId);
+      if (result.checkout_url) {
+        window.location.href = result.checkout_url;
+      }
+    } catch (error) {
+      toast.error('Failed to start checkout');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="w-full max-w-2xl max-h-[85vh] bg-[#0a0a0a] border border-white/10 rounded-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <div>
+            <h2 className="text-lg font-semibold">Upgrade Your Plan</h2>
+            <p className="text-sm text-gray-400">Current: {currentPlan || 'Free'} • Credits: ${credits?.toFixed(2) || '0.00'}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-white/10">
+          <button
+            onClick={() => setActiveTab('plans')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'plans' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}
+          >
+            Subscription Plans
+          </button>
+          <button
+            onClick={() => setActiveTab('credits')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'credits' ? 'text-cyan-400 border-b-2 border-cyan-400' : 'text-gray-400'}`}
+          >
+            Buy Credits
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4 overflow-y-auto max-h-[60vh]">
+          {activeTab === 'plans' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {PLANS.map((plan) => (
+                <div
+                  key={plan.id}
+                  className={`relative p-4 rounded-xl border transition-all ${
+                    plan.popular 
+                      ? 'border-cyan-500/50 bg-cyan-500/5' 
+                      : 'border-white/10 hover:border-white/20'
+                  }`}
+                >
+                  {plan.popular && (
+                    <span className="absolute -top-2 left-4 px-2 py-0.5 text-xs font-bold bg-cyan-500 text-black rounded-full">
+                      POPULAR
+                    </span>
+                  )}
+                  <h3 className="text-lg font-semibold">{plan.name}</h3>
+                  <div className="mt-2">
+                    <span className="text-2xl font-bold">${plan.price}</span>
+                    <span className="text-gray-400">/mo</span>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-400">
+                    {plan.credits === -1 ? 'Unlimited credits' : `$${plan.credits} credits/month`}
+                  </p>
+                  <button
+                    onClick={() => handleSubscribe(plan.id)}
+                    disabled={loading || plan.id === 'free' || currentPlan === plan.id}
+                    className={`mt-3 w-full py-2 rounded-lg text-sm font-medium transition-colors ${
+                      currentPlan === plan.id
+                        ? 'bg-green-500/20 text-green-400 cursor-default'
+                        : plan.id === 'free'
+                        ? 'bg-white/5 text-gray-500 cursor-default'
+                        : 'bg-cyan-500 hover:bg-cyan-600 text-black'
+                    }`}
+                  >
+                    {loading === plan.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                    ) : currentPlan === plan.id ? (
+                      'Current Plan'
+                    ) : plan.id === 'free' ? (
+                      'Free Tier'
+                    ) : (
+                      'Subscribe'
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {CREDIT_PACKAGES.map((pkg) => (
+                <button
+                  key={pkg.id}
+                  onClick={() => handleBuyCredits(pkg.id)}
+                  disabled={loading}
+                  className="p-4 rounded-xl border border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all text-left"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-semibold">{pkg.name}</span>
+                    {loading === pkg.id && <Loader2 className="w-4 h-4 animate-spin" />}
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-xl font-bold text-cyan-400">${pkg.credits}</span>
+                    <span className="text-gray-400 text-sm"> credits</span>
+                  </div>
+                  <div className="mt-1 text-sm text-gray-500">
+                    ${pkg.price} USD
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 // Main Workspace
 export default function WorkspacePage() {
   const { user, loading: authLoading, logout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('chat');
   const [conversationId, setConversationId] = useState(null);
   const [conversations, setConversations] = useState([]);
@@ -1444,6 +1610,37 @@ export default function WorkspacePage() {
   // Credits & Super Admin
   const [credits, setCredits] = useState(10.00);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState('free');
+  
+  // Subscription Modal
+  const [showSubscription, setShowSubscription] = useState(false);
+
+  // Handle payment redirect
+  useEffect(() => {
+    const paymentStatus = searchParams.get('payment');
+    const sessionId = searchParams.get('session_id');
+    
+    if (paymentStatus === 'success' && sessionId) {
+      // Poll for payment status
+      const pollStatus = async () => {
+        try {
+          const status = await getCheckoutStatus(sessionId);
+          if (status.payment_status === 'paid') {
+            toast.success('Payment successful! Credits added.');
+            loadUserCredits();
+          }
+        } catch (e) {
+          console.error('Payment status check failed:', e);
+        }
+      };
+      pollStatus();
+      // Clear URL params
+      window.history.replaceState({}, '', '/workspace');
+    } else if (paymentStatus === 'cancelled') {
+      toast.info('Payment cancelled');
+      window.history.replaceState({}, '', '/workspace');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!authLoading && !user) navigate('/login');
@@ -1462,9 +1659,10 @@ export default function WorkspacePage() {
 
   const loadUserCredits = async () => {
     try {
-      const data = await getUserCredits();
+      const data = await getSubscription();
       setIsSuperAdmin(data.is_super_admin || false);
-      if (!data.unlimited) {
+      setCurrentPlan(data.subscription?.plan || 'free');
+      if (!data.is_super_admin) {
         setCredits(data.credits || 0);
       }
     } catch (e) { 
@@ -1481,11 +1679,11 @@ export default function WorkspacePage() {
   if (authLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-8 h-8 text-blue-400 animate-spin" /></div>;
 
   return (
-    <div className="bg-background min-h-screen md:grid md:grid-cols-[64px_1fr]">
+    <div className="bg-background min-h-screen min-h-[100dvh] md:grid md:grid-cols-[64px_1fr]">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} />
       
-      <div className="flex-1 h-screen overflow-hidden flex flex-col">
+      <div className="flex-1 h-[100dvh] overflow-hidden flex flex-col pb-safe">
         {/* Header with Welcome & Credits */}
         <WorkspaceHeader 
           user={user}
@@ -1494,6 +1692,7 @@ export default function WorkspacePage() {
           selectedMode={selectedMode}
           selectedAgent={selectedAgent}
           onOpenAgentSelector={() => setShowAgentSelector(true)}
+          onOpenSubscription={() => setShowSubscription(true)}
         />
         
         {/* Main Content */}
@@ -1541,6 +1740,19 @@ export default function WorkspacePage() {
               setUltraThinking(!ultraThinking);
               toast.success(ultraThinking ? 'Ultra Thinking disabled' : 'Ultra Thinking enabled');
             }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Subscription Modal */}
+      <AnimatePresence>
+        {showSubscription && (
+          <SubscriptionModal
+            isOpen={showSubscription}
+            onClose={() => setShowSubscription(false)}
+            currentPlan={currentPlan}
+            credits={credits}
+            onPurchase={loadUserCredits}
           />
         )}
       </AnimatePresence>

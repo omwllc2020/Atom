@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, BackgroundTasks, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, BackgroundTasks, UploadFile, File, Form, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
@@ -38,6 +38,9 @@ JWT_EXPIRATION_HOURS = 24
 
 # Emergent LLM Key
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+
+# Stripe API Key
+STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY')
 
 # Super Admin Configuration
 SUPER_ADMIN_EMAIL = "Antoniohoshaw6@gmail.com"
@@ -208,12 +211,12 @@ MODE_CONFIGS = {
     }
 }
 
-# Subscription Plans
+# Subscription Plans (Replit-style pricing)
 SUBSCRIPTION_PLANS = {
     "free": {
         "name": "Free",
-        "price_monthly": 0,
-        "credits_monthly": 10,
+        "price_monthly": 0.0,
+        "credits_monthly": 10.0,
         "features": {
             "chat_messages": 50,
             "code_executions": 20,
@@ -225,15 +228,30 @@ SUBSCRIPTION_PLANS = {
             "priority_support": False
         }
     },
+    "core": {
+        "name": "Core",
+        "price_monthly": 20.0,
+        "credits_monthly": 25.0,
+        "features": {
+            "chat_messages": 500,
+            "code_executions": 200,
+            "video_generations": 10,
+            "image_generations": 50,
+            "agents": ["nova", "forge", "sentinel", "atlas", "pulse"],
+            "modes": ["e1", "e2"],
+            "ultra_thinking": True,
+            "priority_support": False
+        }
+    },
     "pro": {
         "name": "Pro",
-        "price_monthly": 29,
-        "credits_monthly": 500,
+        "price_monthly": 40.0,
+        "credits_monthly": 50.0,
         "features": {
             "chat_messages": 2000,
             "code_executions": 500,
-            "video_generations": 20,
-            "image_generations": 100,
+            "video_generations": 25,
+            "image_generations": 150,
             "agents": ["nova", "forge", "sentinel", "atlas", "pulse"],
             "modes": ["e1", "e2", "prototype", "mobile"],
             "ultra_thinking": True,
@@ -242,7 +260,7 @@ SUBSCRIPTION_PLANS = {
     },
     "enterprise": {
         "name": "Enterprise",
-        "price_monthly": 99,
+        "price_monthly": 99.0,
         "credits_monthly": -1,
         "features": {
             "chat_messages": -1,
@@ -258,13 +276,22 @@ SUBSCRIPTION_PLANS = {
     }
 }
 
-# Credit Costs per action
+# Credit Packages for top-ups (Replit-style)
+CREDIT_PACKAGES = {
+    "small": {"name": "Small", "credits": 10.0, "price": 5.0},
+    "medium": {"name": "Medium", "credits": 25.0, "price": 10.0},
+    "large": {"name": "Large", "credits": 50.0, "price": 18.0},
+    "xlarge": {"name": "XL", "credits": 100.0, "price": 30.0}
+}
+
+# Credit Costs per action (Replit-style)
 CREDIT_COSTS = {
-    "chat_message": 0.1,
-    "chat_ultra_thinking": 0.2,
+    "chat_message": 0.10,
+    "chat_ultra_thinking": 0.15,
     "code_execution": 0.05,
-    "video_generation": 5.0,
-    "image_generation": 0.5,
+    "video_generation": 2.50,
+    "image_generation": 0.25,
+    "agent_checkpoint": 0.25,
     "site_clone": 1.0
 }
 
@@ -835,38 +862,302 @@ async def get_subscription(current_user: dict = Depends(get_current_user)):
     return {
         "subscription": subscription,
         "plan_details": plan_details,
-        "is_super_admin": current_user.get("is_super_admin", False)
+        "is_super_admin": current_user.get("is_super_admin", False),
+        "credits": current_user.get("credits", 0),
+        "credit_packages": CREDIT_PACKAGES
     }
 
-@api_router.post("/subscription/upgrade")
-async def upgrade_subscription(
-    plan_id: str,
+# ==================== STRIPE PAYMENT ENDPOINTS ====================
+
+class CheckoutRequest(BaseModel):
+    package_id: Optional[str] = None  # For credit top-ups
+    plan_id: Optional[str] = None  # For subscriptions
+    origin_url: str
+
+@api_router.post("/checkout/subscription")
+async def create_subscription_checkout(
+    request: Request,
+    checkout_request: CheckoutRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Upgrade user's subscription (simplified - no Stripe integration yet)"""
-    if plan_id not in SUBSCRIPTION_PLANS:
+    """Create Stripe checkout session for subscription"""
+    from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
+    
+    if not checkout_request.plan_id or checkout_request.plan_id not in SUBSCRIPTION_PLANS:
         raise HTTPException(status_code=400, detail="Invalid plan")
     
-    plan = SUBSCRIPTION_PLANS[plan_id]
-    period_start, period_end = get_period_dates()
+    if checkout_request.plan_id == "free":
+        raise HTTPException(status_code=400, detail="Cannot checkout free plan")
     
-    await db.users.update_one(
-        {"id": current_user["id"]},
+    plan = SUBSCRIPTION_PLANS[checkout_request.plan_id]
+    amount = plan["price_monthly"]
+    
+    # Build URLs dynamically from frontend origin
+    success_url = f"{checkout_request.origin_url}/workspace?payment=success&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{checkout_request.origin_url}/workspace?payment=cancelled"
+    
+    # Initialize Stripe
+    host_url = str(request.base_url).rstrip('/')
+    webhook_url = f"{host_url}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    
+    # Create checkout session
+    checkout_req = CheckoutSessionRequest(
+        amount=float(amount),
+        currency="usd",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={
+            "user_id": current_user["id"],
+            "type": "subscription",
+            "plan_id": checkout_request.plan_id,
+            "credits": str(plan["credits_monthly"])
+        }
+    )
+    
+    session = await stripe_checkout.create_checkout_session(checkout_req)
+    
+    # Create pending transaction record
+    transaction = {
+        "id": str(uuid.uuid4()),
+        "session_id": session.session_id,
+        "user_id": current_user["id"],
+        "type": "subscription",
+        "plan_id": checkout_request.plan_id,
+        "amount": amount,
+        "currency": "usd",
+        "status": "pending",
+        "payment_status": "initiated",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.payment_transactions.insert_one(transaction)
+    
+    return {"checkout_url": session.url, "session_id": session.session_id}
+
+@api_router.post("/checkout/credits")
+async def create_credits_checkout(
+    request: Request,
+    checkout_request: CheckoutRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create Stripe checkout session for credit top-up"""
+    from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
+    
+    if not checkout_request.package_id or checkout_request.package_id not in CREDIT_PACKAGES:
+        raise HTTPException(status_code=400, detail="Invalid credit package")
+    
+    package = CREDIT_PACKAGES[checkout_request.package_id]
+    amount = package["price"]
+    credits = package["credits"]
+    
+    # Build URLs dynamically
+    success_url = f"{checkout_request.origin_url}/workspace?payment=success&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{checkout_request.origin_url}/workspace?payment=cancelled"
+    
+    # Initialize Stripe
+    host_url = str(request.base_url).rstrip('/')
+    webhook_url = f"{host_url}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    
+    # Create checkout session
+    checkout_req = CheckoutSessionRequest(
+        amount=float(amount),
+        currency="usd",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={
+            "user_id": current_user["id"],
+            "type": "credits",
+            "package_id": checkout_request.package_id,
+            "credits": str(credits)
+        }
+    )
+    
+    session = await stripe_checkout.create_checkout_session(checkout_req)
+    
+    # Create pending transaction record
+    transaction = {
+        "id": str(uuid.uuid4()),
+        "session_id": session.session_id,
+        "user_id": current_user["id"],
+        "type": "credits",
+        "package_id": checkout_request.package_id,
+        "credits": credits,
+        "amount": amount,
+        "currency": "usd",
+        "status": "pending",
+        "payment_status": "initiated",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.payment_transactions.insert_one(transaction)
+    
+    return {"checkout_url": session.url, "session_id": session.session_id}
+
+@api_router.get("/checkout/status/{session_id}")
+async def get_checkout_status(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Check payment status and update user credits/subscription"""
+    from emergentintegrations.payments.stripe.checkout import StripeCheckout
+    
+    # Check if already processed
+    transaction = await db.payment_transactions.find_one(
+        {"session_id": session_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # If already completed, return cached status
+    if transaction.get("payment_status") == "paid":
+        return {
+            "status": "complete",
+            "payment_status": "paid",
+            "message": "Payment already processed"
+        }
+    
+    # Initialize Stripe and check status
+    host_url = str(request.base_url).rstrip('/')
+    webhook_url = f"{host_url}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    
+    status = await stripe_checkout.get_checkout_status(session_id)
+    
+    # Update transaction
+    await db.payment_transactions.update_one(
+        {"session_id": session_id},
         {"$set": {
-            "subscription.plan": plan_id,
-            "subscription.status": "active",
-            "subscription.current_period_start": period_start,
-            "subscription.current_period_end": period_end,
-            "credits": plan["credits_monthly"],
+            "status": status.status,
+            "payment_status": status.payment_status,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
     )
     
+    # If payment successful, update user
+    if status.payment_status == "paid" and transaction.get("payment_status") != "paid":
+        user_id = transaction.get("user_id") or status.metadata.get("user_id")
+        
+        if transaction.get("type") == "subscription":
+            plan_id = transaction.get("plan_id") or status.metadata.get("plan_id")
+            plan = SUBSCRIPTION_PLANS.get(plan_id, SUBSCRIPTION_PLANS["free"])
+            period_start, period_end = get_period_dates()
+            
+            await db.users.update_one(
+                {"id": user_id},
+                {"$set": {
+                    "subscription.plan": plan_id,
+                    "subscription.status": "active",
+                    "subscription.current_period_start": period_start,
+                    "subscription.current_period_end": period_end,
+                    "credits": plan["credits_monthly"],
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+        elif transaction.get("type") == "credits":
+            credits_to_add = float(transaction.get("credits") or status.metadata.get("credits", 0))
+            await db.users.update_one(
+                {"id": user_id},
+                {"$inc": {"credits": credits_to_add}}
+            )
+        
+        # Log the transaction
+        await log_usage(
+            user_id=user_id,
+            action=f"payment_{transaction.get('type')}",
+            credits_used=-float(transaction.get("credits", 0)),
+            metadata={
+                "session_id": session_id,
+                "amount": transaction.get("amount"),
+                "type": transaction.get("type")
+            }
+        )
+    
     return {
-        "status": "upgraded",
-        "plan": plan_id,
-        "credits": plan["credits_monthly"]
+        "status": status.status,
+        "payment_status": status.payment_status,
+        "amount_total": status.amount_total,
+        "currency": status.currency
     }
+
+@api_router.post("/webhook/stripe")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events"""
+    from emergentintegrations.payments.stripe.checkout import StripeCheckout
+    
+    body = await request.body()
+    signature = request.headers.get("Stripe-Signature")
+    
+    host_url = str(request.base_url).rstrip('/')
+    webhook_url = f"{host_url}/api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    
+    try:
+        webhook_response = await stripe_checkout.handle_webhook(body, signature)
+        
+        # Update transaction based on webhook event
+        if webhook_response.session_id:
+            await db.payment_transactions.update_one(
+                {"session_id": webhook_response.session_id},
+                {"$set": {
+                    "status": webhook_response.event_type,
+                    "payment_status": webhook_response.payment_status,
+                    "webhook_event_id": webhook_response.event_id,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            
+            # Process successful payment
+            if webhook_response.payment_status == "paid":
+                transaction = await db.payment_transactions.find_one(
+                    {"session_id": webhook_response.session_id},
+                    {"_id": 0}
+                )
+                
+                if transaction and transaction.get("payment_status") != "paid":
+                    user_id = transaction.get("user_id") or webhook_response.metadata.get("user_id")
+                    
+                    if transaction.get("type") == "subscription":
+                        plan_id = transaction.get("plan_id") or webhook_response.metadata.get("plan_id")
+                        plan = SUBSCRIPTION_PLANS.get(plan_id, SUBSCRIPTION_PLANS["free"])
+                        period_start, period_end = get_period_dates()
+                        
+                        await db.users.update_one(
+                            {"id": user_id},
+                            {"$set": {
+                                "subscription.plan": plan_id,
+                                "subscription.status": "active",
+                                "subscription.current_period_start": period_start,
+                                "subscription.current_period_end": period_end,
+                                "credits": plan["credits_monthly"]
+                            }}
+                        )
+                    elif transaction.get("type") == "credits":
+                        credits_to_add = float(transaction.get("credits") or webhook_response.metadata.get("credits", 0))
+                        await db.users.update_one(
+                            {"id": user_id},
+                            {"$inc": {"credits": credits_to_add}}
+                        )
+        
+        return {"received": True}
+    except Exception as e:
+        logging.error(f"Webhook error: {e}")
+        return {"received": True, "error": str(e)}
+
+@api_router.get("/payment/history")
+async def get_payment_history(
+    limit: int = 20,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get user's payment history"""
+    transactions = await db.payment_transactions.find(
+        {"user_id": current_user["id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(limit).to_list(limit)
+    
+    return {"transactions": transactions}
 
 # ==================== ADMIN ENDPOINTS ====================
 

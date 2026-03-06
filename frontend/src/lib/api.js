@@ -209,8 +209,32 @@ export const getSubscription = async () => {
   return response.data;
 };
 
-export const upgradeSubscription = async (planId) => {
-  const response = await axios.post(`${API}/subscription/upgrade?plan_id=${planId}`, {}, { headers: getAuthHeader() });
+// Stripe Checkout
+export const createSubscriptionCheckout = async (planId) => {
+  const originUrl = window.location.origin;
+  const response = await axios.post(`${API}/checkout/subscription`, {
+    plan_id: planId,
+    origin_url: originUrl
+  }, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const createCreditsCheckout = async (packageId) => {
+  const originUrl = window.location.origin;
+  const response = await axios.post(`${API}/checkout/credits`, {
+    package_id: packageId,
+    origin_url: originUrl
+  }, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const getCheckoutStatus = async (sessionId) => {
+  const response = await axios.get(`${API}/checkout/status/${sessionId}`, { headers: getAuthHeader() });
+  return response.data;
+};
+
+export const getPaymentHistory = async (limit = 20) => {
+  const response = await axios.get(`${API}/payment/history?limit=${limit}`, { headers: getAuthHeader() });
   return response.data;
 };
 
