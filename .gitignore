@@ -1,13 +1,11 @@
-node_modules
-frontend/node_modules
-.venv
-.ruff_cache
-__pycache__
 .env
 backend/.env
-frontend/.env
+.venv
+node_modules
+frontend/node_modules
 build
 frontend/build
 dist
+.DS_Store
 atom-project-backup.tar.gz
 project.zip
